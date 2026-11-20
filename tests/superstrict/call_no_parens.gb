@@ -1,0 +1,5 @@
+' expect: Call reset with parentheses: reset(...)
+superstrict
+function reset()
+endfunction
+reset

@@ -1,0 +1,14 @@
+' include: each file has its own top-level locals and functions;
+' global variables and global functions are shared by every file
+strict
+include "scope/lib.gb"
+local count:int = 1          ' main's own: lib.gb's count is a string of its own
+function helper:string()     ' lib.gb has a helper too: each file calls its own
+    return "main's helper"
+endfunction
+print(helper())
+print(lib_report())
+print(count)
+add(5)
+add(2)
+print(total)

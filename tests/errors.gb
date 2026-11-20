@@ -7,4 +7,4 @@ function boom(t:t_thing)
 endfunction
 x:t_thing = new t_thing
 x = null
-print boom(x)
+print(boom(x))

@@ -1,0 +1,6 @@
+' expect: cannot use the function int() as int (to call a function, use parentheses: f())
+superstrict
+function score:int()
+    return 3
+endfunction
+local s:int = score

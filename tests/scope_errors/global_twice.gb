@@ -1,0 +1,4 @@
+' expect: function 'secret' is also defined in private.gb; a global function's name can be used only once
+include "lib/private.gb"
+global function secret()
+endfunction

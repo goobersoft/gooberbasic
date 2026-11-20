@@ -11,6 +11,7 @@ typedef struct {
     int func;
     uint8_t *ip;
     Value *base;
+    ObjClosure *closure;   /* the function value being run, or NULL for a direct call */
 } Frame;
 
 struct VM {
@@ -20,6 +21,7 @@ struct VM {
     Frame frames[GB_MAX_FRAMES];
     int nframes;
     Value *globals;
+    ObjUpvalue *openUpvalues;
 
     /* garbage collector */
     Obj *objects;
@@ -45,6 +47,8 @@ ObjList *list_new(VM *vm);
 void list_add(VM *vm, ObjList *l, Value v, bool atFront);
 void list_unlink(ObjLink *k);
 void list_clear(ObjList *l);
+ObjClosure *closure_new(VM *vm, int fidx, int nup);
+ObjUpvalue *upvalue_new(VM *vm, Value *loc);
 void gc_collect(VM *vm);
 void gc_free_all(VM *vm);
 Value default_value(uint8_t kind);

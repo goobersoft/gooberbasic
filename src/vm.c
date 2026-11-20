@@ -219,7 +219,29 @@ static ObjLink *iter_skip(ObjLink *k) {
 #define PUSH(v) (*sp++ = (v))
 #define ERR(...) do { vm->ip = ip; vm->sp = sp; vm_error(vm, __VA_ARGS__); } while (0)
 
-static void call_function(VM *vm, int fidx, int argc, Value **spp, uint8_t **ipp) {
+/* The upvalue for stack slot `loc`: the open one already made for it, or a new one. */
+static ObjUpvalue *capture_upvalue(VM *vm, Value *loc) {
+    ObjUpvalue **link = &vm->openUpvalues;
+    while (*link && (*link)->loc > loc) link = &(*link)->nextOpen;
+    if (*link && (*link)->loc == loc) return *link;
+    ObjUpvalue *u = upvalue_new(vm, loc);
+    u->nextOpen = *link;
+    *link = u;
+    return u;
+}
+
+/* A function is returning: its locals at `from` and above move into their upvalues. */
+static void close_upvalues(VM *vm, Value *from) {
+    while (vm->openUpvalues && vm->openUpvalues->loc >= from) {
+        ObjUpvalue *u = vm->openUpvalues;
+        u->closed = *u->loc;
+        u->loc = &u->closed;
+        vm->openUpvalues = u->nextOpen;
+        u->nextOpen = NULL;
+    }
+}
+
+static void call_function(VM *vm, int fidx, int argc, Value **spp, uint8_t **ipp, ObjClosure *closure) {
     FuncDef *fd = &vm->prog->funcs[fidx];
     Value *sp = *spp;
     if (vm->nframes >= GB_MAX_FRAMES || sp + fd->nlocals + 256 >= vm->stack + GB_STACK_SIZE) {
@@ -231,6 +253,7 @@ static void call_function(VM *vm, int fidx, int argc, Value **spp, uint8_t **ipp
     Frame *f = &vm->frames[vm->nframes++];
     f->func = fidx;
     f->base = sp - argc;
+    f->closure = closure;
     for (int i = argc; i < fd->nlocals; i++) {
         VType t = fd->localTypes[i];
         *sp++ = default_value(t.dims ? K_ARRAY : t.base);
@@ -250,6 +273,8 @@ int vm_run(VM *vm) {
     Frame *frame = &vm->frames[0];
     frame->func = 0;
     frame->base = vm->stack;
+    frame->closure = NULL;
+    vm->openUpvalues = NULL;
     Value *sp = vm->stack;
     FuncDef *mainFd = &prog->funcs[0];
     for (int i = 0; i < mainFd->nlocals; i++) {
@@ -258,6 +283,7 @@ int vm_run(VM *vm) {
     }
     uint8_t *ip = prog->code + mainFd->entry;
     Value *base = frame->base;
+    ObjClosure *cl = NULL;   /* the function value being run (for its upvalues) */
 
     for (;;) {
         uint8_t op = *ip++;
@@ -413,10 +439,37 @@ int vm_run(VM *vm) {
             case OP_CALL: {
                 int32_t f = READ_I32();
                 int32_t argc = READ_I32();
-                call_function(vm, f, argc, &sp, &ip);
+                call_function(vm, f, argc, &sp, &ip, NULL);
                 base = vm->frames[vm->nframes - 1].base;
+                cl = NULL;
                 break;
             }
+            case OP_CALL_VALUE: {
+                int32_t argc = READ_I32();
+                ObjClosure *c = sp[-argc - 1].as.c;
+                if (!c) ERR("Called a null function");
+                call_function(vm, c->fidx, argc, &sp, &ip, c);
+                base = vm->frames[vm->nframes - 1].base;
+                cl = c;
+                break;
+            }
+            case OP_CLOSURE: {
+                int32_t f = READ_I32();
+                int32_t nup = READ_I32();
+                vm->ip = ip;
+                vm->sp = sp;
+                ObjClosure *c = closure_new(vm, f, nup);
+                PUSH(v_closure(c));   /* on the stack now, so it survives the upvalue allocations below */
+                for (int i = 0; i < nup; i++) {
+                    int32_t isLocal = READ_I32();
+                    int32_t idx = READ_I32();
+                    vm->sp = sp;
+                    c->up[i] = isLocal ? capture_upvalue(vm, base + idx) : cl->up[idx];
+                }
+                break;
+            }
+            case OP_GET_UPVAL: { int32_t u = READ_I32(); PUSH(*cl->up[u]->loc); break; }
+            case OP_SET_UPVAL: { int32_t u = READ_I32(); *cl->up[u]->loc = POP(); break; }
             case OP_NATIVE: {
                 int32_t n = READ_I32();
                 int32_t argc = READ_I32();
@@ -431,11 +484,13 @@ int vm_run(VM *vm) {
             case OP_RET: {
                 Value r = POP();
                 Frame *f = &vm->frames[--vm->nframes];
-                sp = f->base;
+                close_upvalues(vm, f->base);
+                sp = f->base - (f->closure ? 1 : 0);   /* a value call also drops the function */
                 PUSH(r);
                 Frame *caller = &vm->frames[vm->nframes - 1];
                 ip = caller->ip;
                 base = caller->base;
+                cl = caller->closure;
                 break;
             }
 
@@ -542,7 +597,7 @@ static const char *op_names[] = {
     "BANDL", "BORL", "BXORL", "BNOTL", "SHLL", "SHRL", "SARL",
     "I2L", "L2I", "L2F", "U2F", "F2L", "F2U", "L2S", "U2S", "S2L", "S2U", "TRUTH_L",
     "TRUTH_I", "TRUTH_F", "TRUTH_S", "TRUTH_O",
-    "JMP", "JF", "JT", "CALL", "NATIVE", "RET",
+    "JMP", "JF", "JT", "CALL", "CALL_VALUE", "CLOSURE", "GET_UPVAL", "SET_UPVAL", "NATIVE", "RET",
     "NEW", "GETF", "SETF", "ITER_FIRST", "ITER_NEXT", "LINK_VALUE",
     "NEWARR", "AGET", "ASET", "ALEN", "END",
 };
@@ -553,6 +608,7 @@ static int op_operands(uint8_t op) {
         case OP_LOAD_LOCAL: case OP_STORE_LOCAL: case OP_LOAD_GLOBAL: case OP_STORE_GLOBAL:
         case OP_JMP: case OP_JF: case OP_JT: case OP_NEW:
         case OP_GETF: case OP_SETF: case OP_AGET: case OP_ASET: case OP_NARROW:
+        case OP_CALL_VALUE: case OP_GET_UPVAL: case OP_SET_UPVAL:
             return 1;
         case OP_CALL: case OP_NATIVE: case OP_NEWARR:
             return 2;
@@ -575,9 +631,10 @@ void disassemble(Program *p) {
         if (line != lastLine) { printf("%5d ", line); lastLine = line; } else printf("    | ");
         printf("%06d %-13s", off, op <= OP_END ? op_names[op] : "???");
         int n = op_operands(op);
+        if (op == OP_CLOSURE) n = 2 + 2 * read_i32(p->code + off + 5);   /* func, nup, then (isLocal, index) pairs */
         for (int i = 0; i < n; i++) printf(" %d", read_i32(p->code + off + 1 + 4 * i));
         if (op == OP_NATIVE) printf("    ; %s", native_get(read_i32(p->code + off + 1))->name);
-        if (op == OP_CALL) printf("    ; %s", p->funcs[read_i32(p->code + off + 1)].name);
+        if (op == OP_CALL || op == OP_CLOSURE) printf("    ; %s", p->funcs[read_i32(p->code + off + 1)].name);
         if (op == OP_PUSH_CONST) {
             Value c = p->consts[read_i32(p->code + off + 1)];
             if (c.kind == K_FLOAT) printf("    ; %g", c.as.f);

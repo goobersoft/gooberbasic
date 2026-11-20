@@ -14,7 +14,7 @@
 #include <math.h>
 #include <ctype.h>
 
-typedef struct { char *lname; VType type; int slot; } Var;
+typedef struct { char *lname; VType type; int slot; int file; } Var;   /* file: the main program's locals belong to their file (-1: any) */
 
 typedef struct {
     char *lname;
@@ -35,21 +35,30 @@ typedef struct {
     char **pnames;
     int *pdefault;   /* token index of default expression, or -1 */
     VType ret;
+    int file;        /* the file it's defined in */
+    bool shared;     /* global function: every file can call it; else only its own file */
 } FuncSym;
 
 typedef struct { int *items; int n, cap; } IntList;
 typedef struct { IntList breaks, conts; } Loop;
 
-typedef struct {
+/* A variable a function value uses from a function around it. isLocal: it's
+ * the enclosing function's local `index`; else the enclosing function's own upvalue `index`. */
+typedef struct { bool isLocal; int index; VType type; } Upval;
+
+typedef struct FuncState {
     int fidx;
     bool isMain;
     Var *locals;
     int nlocals, cap;
     Loop loops[64];
     int nloops;
+    struct FuncState *enclosing;   /* function values only: the function they're written in */
+    Upval *ups;
+    int nups, capUps;
 } FuncState;
 
-typedef struct { int where; int slot; VType type; ConstSym *c; } VarRef; /* where: 0 local, 1 global, 2 const */
+typedef struct { int where; int slot; VType type; ConstSym *c; } VarRef; /* where: 0 local, 1 global, 2 const, 3 upvalue */
 
 typedef struct {
     int kind;        /* 0 variable, 1 field, 2 array element */
@@ -80,6 +89,10 @@ static struct {
 } C;
 
 static VType expr(void);
+
+/* a parsed function header (see parse_signature) */
+typedef struct { VType ret; int n; VType *ptypes; char **pnames; int *pdef; } Sig;
+static void parse_signature(Token *name, bool isValue, Sig *out);
 
 /* ------------------------------------------------------------------ */
 /* errors, tokens                                                      */
@@ -567,7 +580,8 @@ static bool int_fits(uint8_t a, uint8_t b) {
     return uns[a] && bits[a] < bits[b];
 }
 static bool is_str(VType t) { return t.dims == 0 && t.base == K_STRING; }
-static bool is_ref(VType t) { return t.dims > 0 || t.base == K_OBJ || t.base == K_NULL || t.base == K_LIST; }
+static bool is_ref(VType t) { return t.dims > 0 || t.base == K_OBJ || t.base == K_NULL || t.base == K_LIST || t.base == K_FUNC; }
+static bool is_func(VType t) { return t.dims == 0 && t.base == K_FUNC; }
 static bool is_obj(VType t) { return t.dims == 0 && t.base == K_OBJ; }
 
 static uint8_t runtime_kind(VType t) {
@@ -597,6 +611,22 @@ static const char *type_str(VType t) {
             break;
         }
         case K_VOID: base = "nothing"; break;
+        case K_FUNC: {
+            /* int(int, string); a function that returns nothing is just (int, string) */
+            static char fbuf[8][160];
+            static int fwhich = 0;
+            char *fb = fbuf[fwhich++ & 7];
+            FuncSig *sg = &C.prog->sigs[t.tid];
+            snprintf(fb, 160, "%s(", sg->ret.base == K_VOID && !sg->ret.dims ? "" : type_str(sg->ret));
+            for (int i = 0; i < sg->nparams; i++) {
+                size_t l = strlen(fb);
+                snprintf(fb + l, 160 - l, "%s%s", i ? ", " : "", type_str(sg->params[i]));
+            }
+            size_t l = strlen(fb);
+            snprintf(fb + l, 160 - l, ")");
+            base = fb;
+            break;
+        }
         default: base = "?"; break;
     }
     if (t.dims) {
@@ -610,9 +640,39 @@ static const char *type_str(VType t) {
 
 static bool vt_eq(VType a, VType b) {
     if (a.base != b.base || a.dims != b.dims || a.num != b.num) return false;
-    if (a.base == K_OBJ) return a.tid == b.tid;
-    if (a.base == K_LIST) return a.elem == b.elem && (a.elem != K_OBJ || a.tid == b.tid);
+    if (a.base == K_OBJ || a.base == K_FUNC) return a.tid == b.tid;
+    if (a.base == K_LIST) return a.elem == b.elem && ((a.elem != K_OBJ && a.elem != K_FUNC) || a.tid == b.tid);
     return true;
+}
+
+/* The id of a function signature; equal signatures share one id. */
+static int intern_sig(VType ret, int n, const VType *params) {
+    Program *p = C.prog;
+    ret.lit = 0;
+    for (int i = 0; i < p->nsigs; i++) {
+        FuncSig *g = &p->sigs[i];
+        if (g->nparams != n || !vt_eq(g->ret, ret)) continue;
+        int k = 0;
+        while (k < n && vt_eq(g->params[k], params[k])) k++;
+        if (k == n) return i;
+    }
+    if (p->nsigs == p->capSigs) {
+        p->capSigs = p->capSigs ? p->capSigs * 2 : 16;
+        p->sigs = gb_realloc(p->sigs, sizeof(FuncSig) * (size_t)p->capSigs);
+    }
+    if (p->nsigs >= 0x7fff) cerror("Too many different function types");
+    FuncSig *g = &p->sigs[p->nsigs];
+    g->ret = ret;
+    g->nparams = n;
+    g->params = gb_alloc(sizeof(VType) * (size_t)(n ? n : 1));
+    for (int i = 0; i < n; i++) { g->params[i] = params[i]; g->params[i].lit = 0; }
+    return p->nsigs++;
+}
+
+static VType func_type(VType ret, int n, const VType *params) {
+    VType t = vt(K_FUNC);
+    t.tid = (int16_t)intern_sig(ret, n, params);
+    return t;
 }
 
 static int find_type(const char *lname) {
@@ -684,20 +744,125 @@ static VType suffix_type(char s) {
     return vt(K_INT);
 }
 
-/* Parses an optional ":type" after a name (the name's suffix also counts). */
-static VType parse_annot(Token *name, bool *explicitOut) {
+static int matching_paren(int pos);
+
+/* From `pos`, a run of "(...)" groups and empty "[]" dims: where its last
+ * "(" group starts (-1 if none). In a function header that group is the
+ * parameter list and everything before it is the return type. */
+static int last_group_start_end(int pos, int *endOut) {
+    int last = -1;
+    for (;;) {
+        TokType t = C.tl->toks[pos].type;
+        if (t == T_LPAREN) {
+            int m = matching_paren(pos);
+            if (m < 0) break;
+            last = pos;
+            pos = m + 1;
+        } else if (t == T_LBRACK) {
+            int p = pos + 1;
+            while (C.tl->toks[p].type == T_COMMA) p++;
+            if (C.tl->toks[p].type != T_RBRACK) break;
+            pos = p + 1;
+        } else break;
+    }
+    if (endOut) *endOut = pos;
+    return last;
+}
+static int last_group_start(int pos) { return last_group_start_end(pos, NULL); }
+
+/* `t list`, when `t` is a function type: int(int) list */
+static VType func_list_tail(VType t) {
+    if (!is_func(t) || !at_list_word()) return t;
+    advance();
+    if (at_list_word()) cerror_at(peek(), "Lists of lists are not supported");
+    VType l = vt(K_LIST);
+    l.elem = K_FUNC;
+    l.num = NT_NONE;
+    l.tid = t.tid;
+    return l;
+}
+
+static VType parse_type_tail(VType t, bool header);
+static int parse_empty_dims(void);
+static void call_chain_statement(VType t, bool called);
+
+/* One parameter type inside a function type: int, string[], t_foo, int(int), (string) */
+static VType parse_param_type(void) {
+    VType t;
+    if (pt() == T_LPAREN) t = func_list_tail(parse_type_tail(vt(K_VOID), false));
+    else {
+        Token *tn = expect(T_IDENT, "a parameter type");
+        if (pt() == T_COLON)
+            cerror_at(tn, "A function type lists only the parameter types, without names, e.g. int(int, string)");
+        if (is_old_tlist(tn->lower)) old_tlist_error(tn);
+        if (!is_type_name(tn->lower)) unknown_name(tn, "type");
+        t = func_list_tail(parse_type_tail(parse_type(tn), false));
+    }
+    int d = parse_empty_dims();
+    if (d < 0) cerror("Array types are written without a size, e.g. int[]");
+    if (d) t.dims = (uint8_t)d;
+    return t;
+}
+
+/* After a type: "(types)" groups make it the return type of a function type.
+ * int(int) takes an int and returns an int; int()(string) takes a string and
+ * returns an int(). In a function header the last group is the parameter
+ * list, so it is left alone. */
+static VType parse_type_tail(VType t, bool header) {
+    int stop = header ? last_group_start(C.pos) : C.tl->count;   /* the header's parameter list is not part of the type */
+    for (;;) {
+        if (pt() == T_LBRACK && !t.dims) {   /* int[](int): returns an array */
+            int p = 1;
+            while (peekn(p)->type == T_COMMA) p++;
+            if (peekn(p)->type == T_RBRACK && peekn(p + 1)->type == T_LPAREN && C.pos + p + 1 < stop)
+                t.dims = (uint8_t)parse_empty_dims();
+            else break;
+        }
+        if (!(pt() == T_LPAREN && C.pos < stop)) break;
+        advance();
+        VType ps[64];
+        int n = 0;
+        if (pt() != T_RPAREN) {
+            do {
+                if (n == 64) cerror("Too many parameters in a function type");
+                ps[n++] = parse_param_type();
+            } while (match(T_COMMA));
+        }
+        expect(T_RPAREN, "')' to end the function type");
+        t = func_type(t, n, ps);
+    }
+    return t;
+}
+
+/* At ':' : does a type annotation follow? */
+static bool at_annot(bool header) {
+    if (pt() != T_COLON) return false;
+    Token *n1 = peekn(1);
+    if (n1->type == T_IDENT) return is_type_name(n1->lower);
+    if (n1->type != T_LPAREN) return false;
+    return !header || last_group_start(C.pos + 1) > C.pos + 1;
+}
+
+/* Parses an optional ":type" after a name (the name's suffix also counts).
+ * header: this is a function's return type, so the "(...)" after it is the
+ * parameter list, not part of the type. */
+static VType parse_annot_ex(Token *name, bool *explicitOut, bool header) {
     VType t = vt(K_INT);
     bool ex = false;
     if (pt() == T_COLON && peekn(1)->type == T_IDENT && is_old_tlist(peekn(1)->lower)) old_tlist_error(peekn(1));
-    if (name->suffix) { t = suffix_type(name->suffix); ex = true; }
-    if (pt() == T_COLON && peekn(1)->type == T_IDENT && is_type_name(peekn(1)->lower)) {
+    if (name && name->suffix) { t = suffix_type(name->suffix); ex = true; }
+    if (at_annot(header)) {
         advance();
-        t = parse_type(advance());
+        if (pt() == T_LPAREN) t = parse_type_tail(vt(K_VOID), header);    /* :(string) returns nothing */
+        else t = parse_type_tail(parse_type(advance()), header);
+        if (!header) t = func_list_tail(t);
         ex = true;
     }
     if (explicitOut) *explicitOut = ex;
     return t;
 }
+
+static VType parse_annot(Token *name, bool *explicitOut) { return parse_annot_ex(name, explicitOut, false); }
 
 /* superstrict works by position, not by a flag set as statements run: the
  * prescan reads function headers, fields and globals before any statement,
@@ -811,6 +976,8 @@ static void num_to_str_under(VType from) {
 static void coerce(VType from, VType to, const char *ctx) {
     if (to.base == K_VOID) cerror("%s: nothing to assign to", ctx);
     if (from.base == K_VOID) cerror("%s: expression does not return a value", ctx);
+    if (is_func(from) && !is_func(to) && !to.dims)
+        cerror("%s: cannot use the function %s as %s (to call a function, use parentheses: f())", ctx, type_str(from), type_str(to));
     if (to.dims || from.dims) {
         if (from.base == K_NULL && !from.dims) return;
         if (vt_eq(from, to)) return;
@@ -839,6 +1006,7 @@ static void coerce(VType from, VType to, const char *ctx) {
             if (from.base == K_OBJ && from.tid == to.tid) return;
             break;
         case K_LIST:
+        case K_FUNC:
             if (from.base == K_NULL || vt_eq(from, to)) return;
             break;
     }
@@ -863,11 +1031,19 @@ static void to_bool(VType t) {
 /* symbols                                                             */
 /* ------------------------------------------------------------------ */
 
+/* A local of the main program belongs to the file it's declared in: each
+ * included file's top-level locals are its own (use global to share). A
+ * function's locals are its own anyway. */
+static int local_file(Token *at) { return C.F->isMain && at ? at->file : -1; }
+
+static bool local_visible(const Var *v, int file) { return v->file < 0 || file < 0 || v->file == file; }
+
 static int declare_local_slot(const char *lname, VType t, Token *at) {
     FuncState *F = C.F;
+    int file = local_file(at);
     if (lname) {
         for (int i = 0; i < F->nlocals; i++)
-            if (F->locals[i].lname && strcmp(F->locals[i].lname, lname) == 0) {
+            if (F->locals[i].lname && strcmp(F->locals[i].lname, lname) == 0 && local_visible(&F->locals[i], file)) {
                 if (!vt_eq(F->locals[i].type, t))
                     cerror_at(at, "'%s' was already declared as %s", at->text, type_str(F->locals[i].type));
                 return F->locals[i].slot;
@@ -879,6 +1055,7 @@ static int declare_local_slot(const char *lname, VType t, Token *at) {
     }
     Var *v = &F->locals[F->nlocals];
     v->lname = lname ? gb_strdup(lname) : NULL;
+    v->file = lname ? file : -1;
     v->type = t;
     v->type.lit = 0;
     v->slot = F->nlocals;
@@ -899,19 +1076,73 @@ static ConstSym *find_const(const char *lname) {
     return NULL;
 }
 
-static FuncSym *find_func(const char *lname) {
-    for (int i = 0; i < C.nfuncs; i++)
-        if (strcmp(C.funcs[i].lname, lname) == 0) return &C.funcs[i];
-    return NULL;
+/* the function a name means in `file`: that file's own, else a global function */
+static FuncSym *find_func(const char *lname, int file) {
+    FuncSym *shared = NULL;
+    for (int i = 0; i < C.nfuncs; i++) {
+        FuncSym *f = &C.funcs[i];
+        if (strcmp(f->lname, lname) != 0) continue;
+        if (!f->shared && f->file == file) return f;
+        if (f->shared) shared = f;
+    }
+    return shared;
 }
 
-static bool lookup_var(const char *lname, VarRef *out) {
+static const char *file_name(int file) {
+    const char *p = file >= 0 && file < C.prog->nfiles ? C.prog->files[file] : "?";
+    const char *s = strrchr(p, '/');
+    return s ? s + 1 : p;
+}
+
+/* `id` names a function another file keeps to itself: say so */
+static void private_func_check(Token *id) {
+    for (int i = 0; i < C.nfuncs; i++) {
+        FuncSym *f = &C.funcs[i];
+        if (!strcmp(f->lname, id->lower) && !f->shared && f->file != id->file)
+            cerror_at(id, "'%s' is a function of %s, and only that file can call it (write global function %s there to share it)",
+                      id->text, file_name(f->file), f->name);
+    }
+}
+
+static int add_upvalue(FuncState *F, bool isLocal, int index, VType t) {
+    for (int i = 0; i < F->nups; i++)
+        if (F->ups[i].isLocal == isLocal && F->ups[i].index == index) return i;
+    if (F->nups == F->capUps) {
+        F->capUps = F->capUps ? F->capUps * 2 : 8;
+        F->ups = gb_realloc(F->ups, sizeof(Upval) * (size_t)F->capUps);
+    }
+    F->ups[F->nups].isLocal = isLocal;
+    F->ups[F->nups].index = index;
+    F->ups[F->nups].type = t;
+    return F->nups++;
+}
+
+/* `id` as a variable of a function around the function value F: the index of
+ * F's upvalue for it (added if new), or -1. Each function in between gets an
+ * upvalue too, so the variable is handed down one level at a time. */
+static int resolve_upvalue(FuncState *F, Token *id) {
+    FuncState *E = F->enclosing;
+    if (!E) return -1;
+    int file = E->isMain ? id->file : -1;
+    for (int i = 0; i < E->nlocals; i++)
+        if (E->locals[i].lname && strcmp(E->locals[i].lname, id->lower) == 0 && local_visible(&E->locals[i], file))
+            return add_upvalue(F, true, E->locals[i].slot, E->locals[i].type);
+    int u = resolve_upvalue(E, id);
+    if (u < 0) return -1;
+    return add_upvalue(F, false, u, E->ups[u].type);
+}
+
+static bool lookup_var(Token *id, VarRef *out) {
+    const char *lname = id->lower;
     FuncState *F = C.F;
+    int file = local_file(id);
     for (int i = 0; i < F->nlocals; i++)
-        if (F->locals[i].lname && strcmp(F->locals[i].lname, lname) == 0) {
+        if (F->locals[i].lname && strcmp(F->locals[i].lname, lname) == 0 && local_visible(&F->locals[i], file)) {
             out->where = 0; out->slot = F->locals[i].slot; out->type = F->locals[i].type; out->c = NULL;
             return true;
         }
+    int u = resolve_upvalue(F, id);
+    if (u >= 0) { out->where = 3; out->slot = u; out->type = F->ups[u].type; out->c = NULL; return true; }
     Var *g = find_global(lname);
     if (g) { out->where = 1; out->slot = g->slot; out->type = g->type; out->c = NULL; return true; }
     ConstSym *c = find_const(lname);
@@ -1026,6 +1257,7 @@ static void add_builtin_const(const char *name, VType t, int32_t i, double f) {
 
 static void emit_load_var(VarRef *r) {
     if (r->where == 0) emit_op1(OP_LOAD_LOCAL, r->slot);
+    else if (r->where == 3) emit_op1(OP_GET_UPVAL, r->slot);
     else if (r->where == 1) emit_op1(OP_LOAD_GLOBAL, r->slot);
     else {
         ConstSym *c = r->c;
@@ -1038,6 +1270,7 @@ static void emit_load_var(VarRef *r) {
 
 static void emit_store_var(VarRef *r) {
     if (r->where == 0) emit_op1(OP_STORE_LOCAL, r->slot);
+    else if (r->where == 3) emit_op1(OP_SET_UPVAL, r->slot);
     else if (r->where == 1) emit_op1(OP_STORE_GLOBAL, r->slot);
     else cerror("Cannot assign to a constant");
 }
@@ -1439,8 +1672,14 @@ static VType compare(TokType op, VType lt, VType rt) {
     cerror("Cannot compare %s with %s", type_str(lt), type_str(rt));
 }
 
+static void need_parens(const char *name) __attribute__((noreturn));
+static void need_parens(const char *name) {
+    cerror("Call %s with parentheses: %s(...)", name, name);
+}
+
 static VType call_user(FuncSym *f, bool parens) {
-    if (parens) expect(T_LPAREN, "'('");
+    if (!parens) need_parens(f->name);
+    expect(T_LPAREN, "'('");
     int n = 0;
     bool empty = parens ? pt() == T_RPAREN : at_stmt_end();
     if (!empty) {
@@ -1477,7 +1716,8 @@ static VType kind_char_type(char c) {
 
 static VType call_native(int idx, bool parens) {
     const NativeDef *nd = native_get(idx);
-    if (parens) expect(T_LPAREN, "'('");
+    if (!parens) need_parens(native_get(idx)->name);
+    expect(T_LPAREN, "'('");
     const char *p = nd->params;
     int required = 0, maxArgs = 0;
     bool opt = false;
@@ -1525,7 +1765,8 @@ static int list_fn_index(const char *lower) {
  * list's element type; an int may go into a float list. */
 static VType list_call(Token *id, int which, bool parens) {
     const char *fn = LIST_FNS[which];
-    if (parens) expect(T_LPAREN, "'('");
+    if (!parens) need_parens(LIST_FNS[which]);
+    expect(T_LPAREN, "'('");
     Token *at = peek();
     VType lt = expr();
     if (lt.dims || lt.base != K_LIST) cerror_at(at, "%s needs a list as its first argument, got %s", fn, type_str(lt));
@@ -1639,20 +1880,127 @@ static bool intrinsic(Token *id, VType *out) {
     return true;
 }
 
+/* At '(' after a function value already on the stack: its arguments and the call. */
+static VType call_value(VType ft) {
+    FuncSig *sg = &C.prog->sigs[ft.tid];
+    VType ret = sg->ret;
+    int np = sg->nparams;
+    expect(T_LPAREN, "'('");
+    int n = 0;
+    if (pt() != T_RPAREN) {
+        do {
+            sg = &C.prog->sigs[ft.tid];   /* an argument can add signatures, which can move the table */
+            if (n >= np) cerror("Too many arguments for %s (it takes %d)", type_str(ft), np);
+            char ctx[200];
+            snprintf(ctx, sizeof ctx, "Argument %d of %s", n + 1, type_str(ft));
+            VType want = sg->params[n];
+            VType at = expr();
+            coerce(at, want, ctx);
+            n++;
+        } while (match(T_COMMA));
+    }
+    expect(T_RPAREN, "')'");
+    if (n < np) cerror("Missing arguments for %s: it takes %d, got %d", type_str(ft), np, n);
+    emit_op1(OP_CALL_VALUE, n);
+    return ret;
+}
+
+/* Puts a named function on the stack as a value (it captures nothing). */
+static VType named_func_value(FuncSym *f) {
+    emit_op(OP_CLOSURE);
+    emit_i32(f->fidx);
+    emit_i32(0);
+    return func_type(f->ret, f->nparams, f->ptypes);
+}
+
+static void block(const TokType *stops, int nstops, Token *opener);
+
+/* function:int(x:int) ... endfunction, used as a value. The body is compiled
+ * where it stands, with a jump over it, like a named function; then
+ * OP_CLOSURE makes the value, capturing the variables it uses from around it. */
+static VType function_value(void) {
+    Token *fnTok = advance();
+    if (pt() == T_IDENT)
+        cerror_at(peek(), "A function used as a value has no name: write function:int(x:int) ... endfunction "
+                          "(declare named functions at the top level)");
+    Sig sg;
+    parse_signature(fnTok, true, &sg);
+    for (int i = 0; i < sg.n; i++)
+        if (sg.pdef[i] >= 0) cerror_at(fnTok, "A function value's parameters can't have default values (give '%s' no default)", sg.pnames[i]);
+
+    Program *p = C.prog;
+    if (p->nfuncs == p->capFuncs) {
+        p->capFuncs = p->capFuncs ? p->capFuncs * 2 : 32;
+        p->funcs = gb_realloc(p->funcs, sizeof(FuncDef) * (size_t)p->capFuncs);
+    }
+    int fidx = p->nfuncs++;
+    FuncDef *fd = &p->funcs[fidx];
+    memset(fd, 0, sizeof *fd);
+    char nm[64];
+    snprintf(nm, sizeof nm, "<function line %d>", fnTok->line);
+    fd->name = gb_strdup(nm);
+    fd->nparams = sg.n;
+    fd->params = sg.ptypes;
+    fd->ret = sg.ret;
+    fd->entry = -1;
+
+    int over = emit_jump(OP_JMP);
+    FuncState fs;
+    memset(&fs, 0, sizeof fs);
+    fs.fidx = fidx;
+    fs.isMain = false;
+    fs.enclosing = C.F;
+    FuncState *prev = C.F;
+    int saveDepth = C.depth;
+    C.F = &fs;
+    C.depth = 0;
+    for (int i = 0; i < sg.n; i++) {
+        for (int j = 0; j < i; j++)
+            if (!strcmp(sg.pnames[i], sg.pnames[j])) cerror_at(fnTok, "Parameter '%s' appears twice", sg.pnames[i]);
+        declare_local_slot(sg.pnames[i], sg.ptypes[i], fnTok);
+    }
+    C.prog->funcs[fidx].entry = here();
+    static const TokType stops[] = {T_ENDFUNCTION};
+    block(stops, 1, fnTok);
+    expect(T_ENDFUNCTION, "endfunction");
+    emit_op1(OP_PUSH_DEFAULT, ret_kind(sg.ret));
+    emit_op(OP_RET);
+
+    fd = &C.prog->funcs[fidx];
+    fd->nlocals = fs.nlocals;
+    fd->localTypes = gb_alloc(sizeof(VType) * (size_t)(fs.nlocals ? fs.nlocals : 1));
+    for (int i = 0; i < fs.nlocals; i++) fd->localTypes[i] = fs.locals[i].type;
+    C.F = prev;
+    C.depth = saveDepth;
+    patch_here(over);
+
+    emit_op(OP_CLOSURE);
+    emit_i32(fidx);
+    emit_i32(fs.nups);
+    for (int i = 0; i < fs.nups; i++) {
+        emit_i32(fs.ups[i].isLocal);
+        emit_i32(fs.ups[i].index);
+    }
+    free(fs.ups);
+    return func_type(sg.ret, sg.n, sg.ptypes);
+}
+
 static VType primary_ident(void) {
     Token *id = advance();
     VarRef ref;
-    bool isVar = lookup_var(id->lower, &ref);
-    if (isVar && pt() != T_LPAREN) {
+    bool isVar = lookup_var(id, &ref);
+    if (isVar && (pt() != T_LPAREN || is_func(ref.type))) {   /* f(x) on a function variable: expr_postfix calls it */
         check_suffix(id, ref.type);
         emit_load_var(&ref);
         return ref.type;
     }
-    FuncSym *f = find_func(id->lower);
+    FuncSym *f = find_func(id->lower, id->file);
+    if (!f) private_func_check(id);
     if (f) {
+        if (pt() != T_LPAREN) return named_func_value(f);   /* no parentheses: the function itself */
         if (f->ret.base == K_VOID && !f->ret.dims)
             cerror_at(id, "%s has no return type, so it does not return a value (superstrict)", id->text);
-        return call_user(f, pt() == T_LPAREN);
+        return call_user(f, true);
     }
     VType it;
     if (intrinsic(id, &it)) return it;
@@ -1685,6 +2033,18 @@ static VType expr_primary(void) {
         case T_NULL: advance(); emit_op1(OP_PUSH_DEFAULT, K_OBJ); return vt(K_NULL);
         case T_NEW: {
             advance();
+            /* new int(int) list, new (string) list: a list of function values */
+            int chainEnd;
+            int from = pt() == T_LPAREN ? C.pos : C.pos + 1;
+            if ((pt() == T_LPAREN || (pt() == T_IDENT && is_type_name(peek()->lower))) &&
+                C.tl->toks[from].type == T_LPAREN && last_group_start_end(from, &chainEnd) >= 0 &&
+                C.tl->toks[chainEnd].type == T_IDENT && !strcmp(C.tl->toks[chainEnd].lower, "list")) {
+                VType ft = pt() == T_LPAREN ? parse_type_tail(vt(K_VOID), false) : parse_type_tail(parse_type(advance()), false);
+                VType lt = func_list_tail(ft);
+                if (pt() == T_LPAREN && peekn(1)->type == T_RPAREN) { advance(); advance(); }
+                emit_op2(OP_NATIVE, native_or_die("__list_new"), 0);
+                return lt;
+            }
             Token *tn = expect(T_IDENT, "a type name after new");
             if (is_old_tlist(tn->lower)) old_tlist_error(tn);
             if (at_list_word()) {
@@ -1704,6 +2064,7 @@ static VType expr_primary(void) {
             return r;
         }
         case T_IDENT: return primary_ident();
+        case T_FUNCTION: return function_value();
         default:
             cerror("Expected an expression but found %s", tok_desc(t));
     }
@@ -1711,7 +2072,12 @@ static VType expr_primary(void) {
 
 static VType expr_postfix(void) {
     VType t = expr_primary();
-    while (pt() == T_DOT || pt() == T_LBRACK) {
+    while (pt() == T_DOT || pt() == T_LBRACK || (pt() == T_LPAREN && is_func(t))) {
+        if (pt() == T_LPAREN) {
+            t = call_value(t);
+            if (t.base == K_VOID && !t.dims) cerror("This function returns nothing, so its call has no value");
+            continue;
+        }
         LVal lv;
         parse_accessor(t, &lv);
         emit_lval_load(&lv);
@@ -2015,6 +2381,11 @@ static void assignment(Token *id, VarRef ref) {
         emit_lval_load(&lv);
         VType cur = lv.type;
         parse_accessor(cur, &lv);
+        if (pt() == T_LPAREN && is_func(lv.type)) {   /* e.cb(x), handlers[i](x) */
+            emit_lval_load(&lv);
+            call_chain_statement(lv.type, false);
+            return;
+        }
     }
     TokType op = pt();
     if (op == T_EQ) {
@@ -2049,19 +2420,37 @@ static int matching_paren(int pos) {
     return -1;
 }
 
-static void call_statement(Token *id) {
-    bool parens = false;
-    if (pt() == T_LPAREN) {
-        int m = matching_paren(C.pos);
-        if (m >= 0 && is_end_tok(C.tl->toks[m + 1].type)) parens = true;
+/* A statement that goes on from a value of type `t` on the stack: more
+ * '.field', '[i]' and function-value calls, ending in a call whose result is dropped. */
+static void call_chain_statement(VType t, bool called) {
+    while (pt() == T_DOT || pt() == T_LBRACK || (pt() == T_LPAREN && is_func(t))) {
+        if (pt() == T_LPAREN) { t = call_value(t); called = true; continue; }
+        LVal lv;
+        parse_accessor(t, &lv);
+        emit_lval_load(&lv);
+        t = lv.type;
+        called = false;
     }
-    FuncSym *f = find_func(id->lower);
-    if (f) { call_user(f, parens); emit_op(OP_POP); return; }
-    int li = list_fn_index(id->lower);
-    if (li >= 0) { list_call(id, li, parens); emit_op(OP_POP); return; }
-    int n = native_find(id->lower);
-    if (n >= 0) { call_native(n, parens); emit_op(OP_POP); return; }
-    unknown_name(id, "command or function");
+    if (!called) {
+        if (is_func(t)) cerror("Call the function with parentheses: f(...)");
+        cerror("Expected a call or an assignment");
+    }
+    emit_op(OP_POP);
+}
+
+static void call_statement(Token *id) {
+    bool parens = pt() == T_LPAREN;
+    FuncSym *f = find_func(id->lower, id->file);
+    int li = f ? -1 : list_fn_index(id->lower);
+    int n = f || li >= 0 ? -1 : native_find(id->lower);
+    if (!f) private_func_check(id);
+    if (!f && li < 0 && n < 0) unknown_name(id, "command or function");
+    if (f) { VType r = call_user(f, parens); call_chain_statement(r, true); }
+    else if (li >= 0) { list_call(id, li, parens); emit_op(OP_POP); }
+    else { call_native(n, parens); emit_op(OP_POP); }
+    /* print (a) + 1: the parentheses held only part of the arguments */
+    if (!at_stmt_end() && pt() != T_ELSE && pt() != T_ELSEIF)
+        cerror_at(id, "Call %s with parentheses around all of its arguments: %s(...)", id->text, id->text);
 }
 
 static void ident_statement(void) {
@@ -2070,10 +2459,10 @@ static void ident_statement(void) {
     bool assignish = nx == T_EQ || nx == T_DOT || nx == T_LBRACK || nx == T_ADD_ASSIGN || nx == T_SUB_ASSIGN ||
                      nx == T_MUL_ASSIGN || nx == T_DIV_ASSIGN;
     VarRef ref;
-    bool isVar = lookup_var(id->lower, &ref);
+    bool isVar = lookup_var(id, &ref);
     advance();
     /* `name:Type = value` declares a local on the spot (like Blitz's p.Player = New Player) */
-    if (nx == T_COLON && peekn(1)->type == T_IDENT && is_type_name(peekn(1)->lower)) {
+    if (at_annot(false)) {
         VType t = parse_annot(id, NULL);
         if (pt() == T_LBRACK) {
             int d = parse_empty_dims();
@@ -2093,8 +2482,14 @@ static void ident_statement(void) {
         assignment(id, ref);
         return;
     }
+    if (isVar && is_func(ref.type) && nx == T_LPAREN) {   /* f(x) where f holds a function */
+        emit_load_var(&ref);
+        call_chain_statement(ref.type, false);
+        return;
+    }
     if (!assignish) {
-        if (isVar && !find_func(id->lower) && native_find(id->lower) < 0 && list_fn_index(id->lower) < 0)
+        if (isVar && is_func(ref.type)) need_parens(id->text);
+        if (isVar && !find_func(id->lower, id->file) && native_find(id->lower) < 0 && list_fn_index(id->lower) < 0)
             cerror_at(id, "Expected '=' after variable '%s'", id->text);
         call_statement(id);
         return;
@@ -2197,7 +2592,7 @@ static VarRef for_var(Token *name, bool isLocal, bool explicitT, VType t) {
         r.c = NULL;
         return r;
     }
-    if (lookup_var(name->lower, &r)) {
+    if (lookup_var(name, &r)) {
         if (r.where == 2) cerror_at(name, "Cannot use constant '%s' as a loop variable", name->text);
         if (explicitT && !vt_eq(r.type, t))
             cerror_at(name, "'%s' was already declared as %s", name->text, type_str(r.type));
@@ -2368,11 +2763,17 @@ static void skip_to_matching_paren(void) {
 }
 
 static void function_statement(Token *fnTok) {
+    if (pt() == T_COLON || pt() == T_LPAREN)
+        cerror_at(fnTok, "A function value has to be used: store it (local f:int(int) = function:int(x:int) ...) or pass it");
     if (!C.F->isMain || C.depth > 0) cerror_at(fnTok, "Functions must be declared at the top level, not inside other code blocks");
     Token *nm = expect(T_IDENT, "a function name");
-    FuncSym *f = find_func(nm->lower);
+    FuncSym *f = find_func(nm->lower, nm->file);
     while (pt() != T_LPAREN) advance();
     skip_to_matching_paren();
+    while (pt() == T_LPAREN || pt() == T_LBRACK) {   /* a function-type return: int()(x:int), int(int)[](x:int) */
+        if (pt() == T_LBRACK) { while (pt() != T_RBRACK) advance(); advance(); continue; }
+        skip_to_matching_paren();
+    }
 
     int over = emit_jump(OP_JMP);
     FuncState fs;
@@ -2409,6 +2810,9 @@ static void return_statement(void) {
     }
     FuncDef *fd = &C.prog->funcs[C.F->fidx];
     if (at_stmt_end()) emit_op1(OP_PUSH_DEFAULT, ret_kind(fd->ret));
+    else if (fd->ret.base == K_VOID && !fd->ret.dims && fd->name[0] == '<')
+        cerror("This function value has no return type, so it returns nothing: give it one to return a value, "
+               "e.g. function:int(x:int)");
     else if (fd->ret.base == K_VOID && !fd->ret.dims)
         cerror("%s has no return type, so it returns nothing: give it one to return a value, "
                "e.g. function %s:int() (superstrict)", fd->name, fd->name);
@@ -2427,6 +2831,7 @@ static void statement(void) {
         case T_LOCAL: advance(); decl_statement(false, false); return;
         case T_GLOBAL:
             advance();
+            if (pt() == T_FUNCTION) { Token *ft = peek(); advance(); function_statement(ft); return; }   /* global function */
             if (!C.F->isMain) cerror_at(t, "global can only be declared outside functions");
             decl_statement(true, false);
             return;
@@ -2527,18 +2932,19 @@ static void prescan_globals_decl(void) {
     } while (match(T_COMMA));
 }
 
-static void prescan_function(void) {
-    Token *name = expect(T_IDENT, "a function name");
-    if (find_func(name->lower)) cerror_at(name, "function '%s' is defined twice", name->text);
+/* A function's return type and parameter list, from just after its name
+ * (or after the word function, for a function value) up to the closing ')'. */
+static void parse_signature(Token *name, bool isValue, Sig *out) {
     bool retEx;
-    VType ret = parse_annot(name, &retEx);
-    if (!retEx && superstrict_at(name)) ret = vt(K_VOID);   /* superstrict: no return type means it returns nothing */
+    VType ret = parse_annot_ex(isValue ? NULL : name, &retEx, true);
+    /* no return type: superstrict means it returns nothing; so does a function value, always */
+    if (!retEx && (isValue || superstrict_at(name))) ret = vt(K_VOID);
     int d = parse_empty_dims();
     if (d < 0) cerror("A function's array return type is written without a size, e.g. function f:int[]()");
-    if (d > 0 && ret.base == K_VOID)
+    if (d > 0 && ret.base == K_VOID && !retEx)
         cerror_at(name, "'%s' returns an array, so it needs a type, e.g. function %s:int[]() (superstrict)", name->text, name->text);
-    ret.dims = (uint8_t)d;
-    expect(T_LPAREN, "'(' after the function name");
+    if (d > 0) ret.dims = (uint8_t)d;
+    expect(T_LPAREN, isValue ? "'(' after function" : "'(' after the function name");
     int cap = 8, n = 0;
     VType *ptypes = gb_alloc(sizeof(VType) * (size_t)cap);
     char **pnames = gb_alloc(sizeof(char *) * (size_t)cap);
@@ -2576,6 +2982,30 @@ static void prescan_function(void) {
     }
     expect(T_RPAREN, "')'");
 
+    out->ret = ret;
+    out->n = n;
+    out->ptypes = ptypes;
+    out->pnames = pnames;
+    out->pdef = pdef;
+}
+
+/* a function's signature. A plain function belongs to its file; global function
+ * is shared by every file, so its name may be used only once. */
+static void prescan_function(bool shared) {
+    Token *name = expect(T_IDENT, "a function name");
+    for (int i = 0; i < C.nfuncs; i++) {
+        FuncSym *o = &C.funcs[i];
+        if (strcmp(o->lname, name->lower) != 0) continue;
+        if (o->file == name->file) cerror_at(name, "function '%s' is defined twice", name->text);
+        if (o->shared || shared)
+            cerror_at(name, "function '%s' is also defined in %s; a global function's name can be used only once", name->text, file_name(o->file));
+    }
+    Sig sg;
+    parse_signature(name, false, &sg);
+    VType ret = sg.ret, *ptypes = sg.ptypes;
+    char **pnames = sg.pnames;
+    int *pdef = sg.pdef, n = sg.n;
+
     Program *p = C.prog;
     if (p->nfuncs == p->capFuncs) {
         p->capFuncs = p->capFuncs ? p->capFuncs * 2 : 32;
@@ -2602,6 +3032,8 @@ static void prescan_function(void) {
     fs->pnames = pnames;
     fs->pdefault = pdef;
     fs->ret = ret;
+    fs->file = name->file;
+    fs->shared = shared;
 }
 
 static void prescan(void) {
@@ -2657,16 +3089,17 @@ static void prescan(void) {
     /* pass 3: function signatures */
     for (int i = 0; i < tl->count; i++) {
         if (tl->toks[i].type != T_FUNCTION) continue;
+        if (tl->toks[i + 1].type != T_IDENT) continue;   /* function:int(...) ... is a function value */
         C.pos = i + 1;
-        prescan_function();
+        prescan_function(i > 0 && tl->toks[i - 1].type == T_GLOBAL);
     }
     /* pass 4: top-level globals */
-    bool inFunc = false;
+    int inFunc = 0;   /* depth: function values nest */
     for (int i = 0; i < tl->count; i++) {
         TokType t = tl->toks[i].type;
-        if (t == T_FUNCTION) inFunc = true;
-        else if (t == T_ENDFUNCTION) inFunc = false;
-        else if (!inFunc && (t == T_GLOBAL || t == T_DIM)) {
+        if (t == T_FUNCTION) inFunc++;
+        else if (t == T_ENDFUNCTION) { if (inFunc > 0) inFunc--; }
+        else if (!inFunc && (t == T_GLOBAL || t == T_DIM) && tl->toks[i + 1].type != T_FUNCTION) {
             C.pos = i + 1;
             prescan_globals_decl();
         }

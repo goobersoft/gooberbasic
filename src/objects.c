@@ -171,6 +171,23 @@ void list_clear(ObjList *l) {
     while (l->head) list_unlink(l->head);
 }
 
+/* Upvalue slots start NULL; fill them in before the next allocation can collect. */
+ObjClosure *closure_new(VM *vm, int fidx, int nup) {
+    ObjClosure *c = gc_obj(vm, sizeof(ObjClosure) + sizeof(ObjUpvalue *) * (size_t)nup, O_CLOSURE);
+    c->fidx = fidx;
+    c->nup = nup;
+    for (int i = 0; i < nup; i++) c->up[i] = NULL;
+    return c;
+}
+
+ObjUpvalue *upvalue_new(VM *vm, Value *loc) {
+    ObjUpvalue *u = gc_obj(vm, sizeof(ObjUpvalue), O_UPVALUE);
+    u->loc = loc;
+    u->closed = default_value(K_INT);
+    u->nextOpen = NULL;
+    return u;
+}
+
 /* ---- collector ---- */
 
 static void mark_obj(VM *vm, Obj *o) {
@@ -205,6 +222,11 @@ static void trace(VM *vm) {
             mark_value(vm, k->value);
             mark_obj(vm, (Obj *)k->next);
             mark_obj(vm, (Obj *)k->list);
+        } else if (o->okind == O_CLOSURE) {
+            ObjClosure *c = (ObjClosure *)o;
+            for (int i = 0; i < c->nup; i++) mark_obj(vm, (Obj *)c->up[i]);
+        } else if (o->okind == O_UPVALUE) {
+            mark_value(vm, ((ObjUpvalue *)o)->closed);   /* an open one's value is on the stack */
         }
     }
 }
@@ -213,6 +235,10 @@ void gc_collect(VM *vm) {
     for (Value *v = vm->stack; v < vm->sp; v++) mark_value(vm, *v);
     for (int i = 0; i < vm->prog->nglobals; i++) mark_value(vm, vm->globals[i]);
     for (int i = 0; i < vm->prog->nconsts; i++) mark_value(vm, vm->prog->consts[i]);
+    /* open upvalues stay on the open list even if no closure uses them any more */
+    for (ObjUpvalue *u = vm->openUpvalues; u; u = u->nextOpen) mark_obj(vm, (Obj *)u);
+    /* a closure being run: normally its callee slot is on the stack too, but be sure */
+    for (int i = 0; i < vm->nframes; i++) mark_obj(vm, (Obj *)vm->frames[i].closure);
     trace(vm);
 
     Obj **link = &vm->objects;
@@ -227,6 +253,8 @@ void gc_collect(VM *vm) {
                 case O_ARRAY: live += sizeof(ObjArray) + sizeof(Value) * (size_t)((ObjArray *)o)->count; break;
                 case O_LIST: live += sizeof(ObjList); break;
                 case O_LINK: live += sizeof(ObjLink); break;
+                case O_CLOSURE: live += sizeof(ObjClosure) + sizeof(ObjUpvalue *) * (size_t)((ObjClosure *)o)->nup; break;
+                case O_UPVALUE: live += sizeof(ObjUpvalue); break;
             }
             link = &o->next;
         } else {

@@ -1,0 +1,13 @@
+strict
+local count:string = "lib's count"
+print(count)
+global total:int = 0
+function helper:string()
+    return "lib's helper"
+endfunction
+global function lib_report:string()
+    return "lib_report calls " + helper()
+endfunction
+global function add(n:int)
+    total = total + n
+endfunction

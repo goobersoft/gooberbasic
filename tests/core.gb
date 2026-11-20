@@ -1,15 +1,15 @@
 ' Smoke test
-print "Hello, GooberBASIC!"
+print("Hello, GooberBASIC!")
 x = 5 : y# = 2.5
-print x * y#
-print "x is " + x
+print(x * y#)
+print("x is " + x)
 s$ = "goober"
-print upper(s$) + " " + len(s$)
+print(upper(s$) + " " + len(s$))
 for i = 1 to 3
-  write i + " "
+  write(i + " ")
 next
-print ""
-for f# = 1.0 to 0.0 step -0.5 : print f# : next
+print("")
+for f# = 1.0 to 0.0 step -0.5 : print(f#) : next
 
 type t_player
   field name$
@@ -21,35 +21,35 @@ for n = 1 to 3
   p:t_player = new t_player
   p.name = "P" + n
   p.hp = n * 10
-  list_add_last players, p
+  list_add_last(players, p)
 next
 for p:t_player = eachin players
-  if p.hp = 20 then list_remove players, p
+  if p.hp = 20 then list_remove(players, p)
 next
 for p = eachin players
-  print p.name + " hp=" + p.hp
+  print(p.name + " hp=" + p.hp)
 next
 
 function add:int(a:int, b:int = 100)
   return a + b
 endfunction
-print add(1, 2)
-print add(1)
-print fact(10)
+print(add(1, 2))
+print(add(1))
+print(fact(10))
 function fact(n)
   if n <= 1 then return 1 else return n * fact(n - 1)
 endfunction
 
 local grid:int[3, 4]
 grid[2, 3] = 42
-print grid[2, 3] + " len=" + len(grid) + "," + len(grid, 2)
+print(grid[2, 3] + " len=" + len(grid) + "," + len(grid, 2))
 
 select x
-  case 1, 2 : print "small"
+  case 1, 2 : print("small")
   case 5
-    print "five"
+    print("five")
   default
-    print "other"
+    print("other")
 endselect
 
 i = 0
@@ -57,19 +57,19 @@ while true
   i :+ 1
   if i > 100 then exit
 wend
-print "i=" + i
+print("i=" + i)
 repeat
   i = i - 30
 until i < 0
-print i
-print (7 / 2) + " " + (7 mod 3)
-print 2 ^ 10
-print not 0 and 1
-print mid("Hello World", 7, 3) + "|" + left("abc", 2) + "|" + right("abc", 1)
-print instr("hello", "ll") + " " + replace("a-b-c", "-", "+")
-print abs(-3) + " " + abs(-2.5) + " " + min(3, 9) + " " + max(1.5, 2)
-print int("42") + 1
-print float(3) / 2
+print(i)
+print((7 / 2) + " " + (7 mod 3))
+print(2 ^ 10)
+print(not 0 and 1)
+print(mid("Hello World", 7, 3) + "|" + left("abc", 2) + "|" + right("abc", 1))
+print(instr("hello", "ll") + " " + replace("a-b-c", "-", "+"))
+print(abs(-3) + " " + abs(-2.5) + " " + min(3, 9) + " " + max(1.5, 2))
+print(int("42") + 1)
+print(float(3) / 2)
 const MAXV = 10 * 2, NAME$ = "Goob" + "er"
-print MAXV + " " + NAME$
-print $FF + %101
+print(MAXV + " " + NAME$)
+print($FF + %101)

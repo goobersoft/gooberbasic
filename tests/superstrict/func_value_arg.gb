@@ -1,0 +1,6 @@
+' expect: Argument 1 of int(int[]): cannot use string as int[]
+superstrict
+local f:int(int[]) = function:int(a:int[])
+    return len(a)
+endfunction
+print(f("x"))

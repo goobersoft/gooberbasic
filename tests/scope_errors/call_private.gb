@@ -1,0 +1,3 @@
+' expect: 'secret' is a function of private.gb, and only that file can call it (write global function secret there to share it)
+include "lib/private.gb"
+secret()

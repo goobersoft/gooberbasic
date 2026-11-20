@@ -1,0 +1,4 @@
+function secret()
+    print("shh")
+endfunction
+local hidden:int = 1

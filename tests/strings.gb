@@ -1,12 +1,12 @@
-print "[" + trim("   pad  ") + "]"
-print lset("ab", 5) + "|" + rset("ab", 5) + "|"
-print hex(255) + " " + bin(5)
-print asc("A") + " " + chr(66)
-print "quote: ~qhi~q tab:[~t]"
-print mid("abcdef", 3) + " " + instr("abcabc", "c", 4)
-print "a" < "b"
-print "10" + 5
-print int("  12abc") + float("2.5")
-print 1.0 / 3
-print 1e20
-print -0.0
+print("[" + trim("   pad  ") + "]")
+print(lset("ab", 5) + "|" + rset("ab", 5) + "|")
+print(hex(255) + " " + bin(5))
+print(asc("A") + " " + chr(66))
+print("quote: ~qhi~q tab:[~t]")
+print(mid("abcdef", 3) + " " + instr("abcabc", "c", 4))
+print("a" < "b")
+print("10" + 5)
+print(int("  12abc") + float("2.5"))
+print(1.0 / 3)
+print(1e20)
+print(-0.0)

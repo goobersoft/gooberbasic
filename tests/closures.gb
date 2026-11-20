@@ -1,0 +1,146 @@
+strict
+type t_btn
+    field label:string
+    field on_click:(string)
+endtype
+
+function double_it:int(x:int)
+    return x * 2
+endfunction
+
+function make_counter:int()(stepsize:int)
+    local count:int = 0
+    return function:int()
+        count = count + stepsize
+        return count
+    endfunction
+endfunction
+
+' two independent counters
+local a:int() = make_counter(1)
+local b:int() = make_counter(10)
+print(a())
+print(a())
+print(b())
+print(a())
+
+' shared state between two closures in one frame
+function make_pair:int()[](start:int)
+    local fns:int()[2]
+    local n:int = start
+    fns[0] = function:int()
+        n = n + 1
+        return n
+    endfunction
+    fns[1] = function:int()
+        return n
+    endfunction
+    return fns
+endfunction
+local pr:int()[] = make_pair(100)
+print(pr[0]())
+print(pr[0]())
+print(pr[1]())
+
+' nested: capture two levels up
+function adder:int(int)(base:int)
+    return function:int(x:int)
+        local inner:int() = function:int()
+            return base + x
+        endfunction
+        return inner()
+    endfunction
+endfunction
+print(adder(5)(3))
+
+' main-program locals captured
+local total:int = 0
+local add_to:(int) = function(n:int)
+    total = total + n
+endfunction
+add_to(4)
+add_to(6)
+print(total)
+
+' named function as a value
+local twice:int(int) = double_it
+print(twice(21))
+
+' loops share the variable
+local fl:int() list = new int() list
+for local i:int = 1 to 3
+    list_add_last(fl, function:int()
+        return i
+    endfunction)
+next
+for local g:int() = eachin fl
+    print(g())
+next
+
+' field callback
+local btn:t_btn = new t_btn
+btn.label = "ok"
+btn.on_click = function(who:string)
+    print("clicked " + who)
+endfunction
+btn.on_click(btn.label)
+
+' null compare and pass as argument
+local nf:int(int)
+print(nf = null)
+nf = twice
+print(nf <> null)
+function apply:int(f:int(int), v:int)
+    return f(v)
+endfunction
+print(apply(function:int(x:int)
+    return x * x
+endfunction, 7))
+
+' superstrict-style: functions returning functions, recursion through a global
+global fib:int(int)
+fib = function:int(n:int)
+    if n < 2 then return n
+    return fib(n - 1) + fib(n - 2)
+endfunction
+print(fib(20))
+local k:int()(int) = function:int()(v:int)
+    return function:int()
+        return v * 3
+    endfunction
+endfunction
+print(k(4)())
+
+' lists and arrays of void functions, called as statements
+local handlers:(int) list = new (int) list
+list_add_last(handlers, function(n:int)
+    print("first " + n)
+endfunction)
+list_add_last(handlers, function(n:int)
+    print("second " + n)
+endfunction)
+for local h:(int) = eachin handlers
+    h(9)
+next
+local steps:int(int)[2]
+steps[0] = double_it
+steps[1] = function:int(x:int)
+    return x + 1
+endfunction
+print(steps[1](steps[0](5)))
+
+' a closure that outlives many frames, under churn
+function make_acc:int(int)()
+    local sum:int = 0
+    return function:int(n:int)
+        sum = sum + n
+        return sum
+    endfunction
+endfunction
+local acc:int(int) = make_acc()
+local junk:string
+for local r:int = 1 to 200
+    junk = "x" + r
+    acc(r)
+next
+print(acc(0))

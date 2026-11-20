@@ -1,0 +1,5 @@
+' expect: A function value's parameters can't have default values
+superstrict
+local f:int(int) = function:int(x:int = 2)
+    return x
+endfunction

@@ -1,0 +1,2 @@
+before
+tests/null_func.gb:4: runtime error: Called a null function

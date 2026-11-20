@@ -1,0 +1,3 @@
+' expect: A function type lists only the parameter types
+superstrict
+local f:int(x:int)

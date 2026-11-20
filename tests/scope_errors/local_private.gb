@@ -1,0 +1,4 @@
+' expect: Identifier 'hidden' has not been declared (strict mode)
+strict
+include "lib/private.gb"
+print(hidden)

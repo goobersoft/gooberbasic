@@ -25,7 +25,8 @@ typedef enum {
     K_LIST,    /* a typed list ("int list", "t_enemy list") */
     K_LINK,    /* internal: a TList node, used by EachIn loops */
     K_LONG,    /* 64-bit integer (as.i64); signed arithmetic */
-    K_ULONG    /* static type only: 64-bit unsigned arithmetic (runtime tag is K_LONG) */
+    K_ULONG,   /* static type only: 64-bit unsigned arithmetic (runtime tag is K_LONG) */
+    K_FUNC     /* a function value (closure); static type: VType.tid is the signature id */
 } Kind;
 
 /* Numeric storage types. The static base (K_INT, K_LONG, K_ULONG, K_FLOAT)
@@ -46,6 +47,8 @@ typedef struct ObjInst ObjInst;
 typedef struct ObjArray ObjArray;
 typedef struct ObjList ObjList;
 typedef struct ObjLink ObjLink;
+typedef struct ObjClosure ObjClosure;
+typedef struct ObjUpvalue ObjUpvalue;
 
 typedef struct {
     uint8_t kind;
@@ -58,6 +61,7 @@ typedef struct {
         ObjArray *a;    /* NULL means Null */
         ObjList *l;     /* NULL means Null */
         ObjLink *lk;
+        ObjClosure *c;  /* NULL means Null */
         Obj *obj;
     } as;
 } Value;
@@ -70,8 +74,9 @@ static inline Value v_obj(ObjInst *o) { Value v; v.kind = K_OBJ; v.as.o = o; ret
 static inline Value v_arr(ObjArray *a) { Value v; v.kind = K_ARRAY; v.as.a = a; return v; }
 static inline Value v_list(ObjList *l) { Value v; v.kind = K_LIST; v.as.l = l; return v; }
 static inline Value v_link(ObjLink *lk) { Value v; v.kind = K_LINK; v.as.lk = lk; return v; }
+static inline Value v_closure(ObjClosure *c) { Value v; v.kind = K_FUNC; v.as.c = c; return v; }
 static inline bool kind_is_ref(uint8_t k) {
-    return k == K_STRING || k == K_OBJ || k == K_ARRAY || k == K_LIST || k == K_LINK;
+    return k == K_STRING || k == K_OBJ || k == K_ARRAY || k == K_LIST || k == K_LINK || k == K_FUNC;
 }
 
 /* ---- Static (compile-time) types ---- */
@@ -81,7 +86,7 @@ typedef struct {
     uint8_t elem;   /* base == K_LIST: the element kind (K_INT, K_FLOAT, K_STRING, K_OBJ, ...) */
     uint8_t num;    /* NumType of a numeric base (for a list: of its elements) */
     uint8_t lit;    /* compiler only: a literal/constant, so it adapts to the other operand */
-    int16_t tid;    /* type id when base (or, for a list, elem) is K_OBJ */
+    int16_t tid;    /* type id when base (or, for a list, elem) is K_OBJ; signature id when it is K_FUNC */
 } VType;
 
 /* The natural (widest) storage type of an arithmetic base. */
@@ -99,7 +104,7 @@ static inline VType vt(uint8_t base) {
 }
 
 /* ---- Heap objects ---- */
-typedef enum { O_STRING, O_INST, O_ARRAY, O_LIST, O_LINK } ObjKind;
+typedef enum { O_STRING, O_INST, O_ARRAY, O_LIST, O_LINK, O_CLOSURE, O_UPVALUE } ObjKind;
 
 struct Obj {
     uint8_t okind;
@@ -146,7 +151,34 @@ struct ObjList {
     int count;
 };
 
+/* A captured local. While the function that owns the local is running the
+ * upvalue is "open": loc points at the local's stack slot (the stack never
+ * moves), and it sits on the VM's openUpvalues list. When that function
+ * returns the value is copied into `closed` and loc points there instead. */
+struct ObjUpvalue {
+    Obj obj;
+    Value *loc;
+    Value closed;
+    ObjUpvalue *nextOpen;   /* open list, sorted by loc, highest first */
+};
+
+/* A function value: which function, plus the variables it captured. */
+struct ObjClosure {
+    Obj obj;
+    int fidx;
+    int nup;
+    ObjUpvalue *up[];
+};
+
 /* ---- Program metadata shared by compiler and VM ---- */
+
+/* A function type ("int(int, string)"). Signatures are interned, so two
+ * function types are the same exactly when their ids are. */
+typedef struct {
+    VType ret;           /* K_VOID: returns nothing */
+    int nparams;
+    VType *params;
+} FuncSig;
 typedef struct {
     char *name;
     char *lname;
@@ -193,6 +225,9 @@ typedef struct {
 
     TypeDef *types;
     int ntypes, capTypes;
+
+    FuncSig *sigs;
+    int nsigs, capSigs;
 
     int nglobals;
     VType *globalTypes;
@@ -241,6 +276,9 @@ typedef enum {
     OP_JMP, OP_JF, OP_JT,   /* absolute target */
 
     OP_CALL,          /* func, argc */
+    OP_CALL_VALUE,    /* argc: calls the function value below the arguments */
+    OP_CLOSURE,       /* func, nup, then nup x (isLocal, index) */
+    OP_GET_UPVAL, OP_SET_UPVAL, /* upvalue index */
     OP_NATIVE,        /* native, argc */
     OP_RET,
 

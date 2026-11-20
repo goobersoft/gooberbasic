@@ -1,0 +1,6 @@
+' expect: This function returns nothing, so its call has no value
+superstrict
+local f:(int) = function(x:int)
+    print(x)
+endfunction
+local y:int = f(1)

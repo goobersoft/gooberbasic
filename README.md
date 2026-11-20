@@ -68,6 +68,7 @@ See its [README](editors/vscode/README.md) for installing it and running program
 - Comments start with `'`. Block comments go between `rem` and `endrem`.
 - End a line with `..` to continue it on the next line.
 - `include "other.gb"` pastes another file in place (each file is included only once).
+  Each file keeps its own top-level `local`s and its own functions; see [Files](#files).
 
 ## Naming style
 
@@ -137,6 +138,8 @@ endfunction
 ```
 - `local` variables belong to the function they're in (or to the main program).
   Main-program locals are **not** visible inside functions; use `global` for that.
+- A top-level `local` also belongs to its file: another file that includes it, or that
+  it includes, can't see it. `global` variables are shared by every file.
 - Values convert automatically on assignment: between any two number types, and
   numbers ↔ `string`. `float` → integer truncates toward zero. Every type name
   also converts explicitly: `int()`, `byte()`, `sint64()`, `double()`, ..., plus `str()`.
@@ -229,14 +232,109 @@ function greet$(name$, greeting$ = "Hello")   ' default argument
 endfunction
 
 print(greet("Goober"))
-draw_badge(10, 20)     ' a call on its own line: parentheses recommended
+draw_badge(10, 20)     ' a call on its own line still needs its parentheses
 ```
 
 - A function with no declared return type returns an `int` (0 if nothing is returned).
-- Write calls with parentheses, even on a line of their own: `set_color(255, 0, 0)`.
-  BlitzBasic's form without them (`set_color 255, 0, 0`) still works, but the examples don't use it.
+- Calls always take parentheses, even on a line of their own and with no arguments:
+  `set_color(255, 0, 0)`, `cls()`. BlitzBasic's form without them (`set_color 255, 0, 0`)
+  is an error, because a function's name on its own is the function itself
+  (see [Function values and closures](#function-values-and-closures)).
 - Functions can be called before (above) the place they're defined.
 - Arrays and objects are passed by reference; numbers and strings by value.
+- A function belongs to the file it's written in, and only that file can call it.
+  Write `global function` to let every file call it (see [Files](#files)).
+
+## Function values and closures
+
+Functions are values too: store them in variables, fields, arrays and lists, pass
+them to other functions and return them.
+
+```basic
+strict
+function double_it:int(x:int)
+    return x * 2
+endfunction
+
+local f:int(int) = double_it              ' a named function, without parentheses
+print(f(21))                              ' 42
+
+local log:(string) = function(msg:string) ' a function written where it's used
+    print("> " + msg)
+endfunction
+log("hello")
+```
+
+- A function type is the return type, then the parameter types in parentheses:
+  `int(int, string)`. One that returns nothing leaves the return type out: `(string)`.
+  A function returning a function reads left to right: `int()(int)` takes an `int` and
+  gives back an `int()`.
+- `function:int(x:int) ... endfunction` makes a function value. It has no name and can go
+  anywhere an expression can. Without a return type (`function(x:int)`) it returns nothing.
+  Its parameters can't have default values.
+- A function variable starts as `null`; compare with `f = null`. Calling a null function
+  is a runtime error.
+- Lists and arrays of functions work as usual: `local handlers:(int) list = new (int) list`,
+  `local steps:int(int)[4]`. Fields too: `field on_hit:(t_enemy)`.
+
+**Closures.** A function value can use the local variables of the function it's written
+in (or of the main program), and keeps them alive after that function has returned:
+
+```basic
+function make_counter:int()(stepsize:int)
+    local count:int = 0
+    return function:int()
+        count = count + stepsize          ' count and stepsize live on
+        return count
+    endfunction
+endfunction
+
+local a:int() = make_counter(1)
+local b:int() = make_counter(10)
+print(a()) : print(a()) : print(b())      ' 1, 2, 10
+```
+
+- It's the variable that is shared, not a copy of its value: if two function values use
+  the same local, or the outer function changes it later, they all see the change.
+- A local belongs to the whole function, so function values made in a loop share the
+  loop variable (after `for local i:int = 1 to 3`, they all see `i` as 4). To keep each
+  pass's value, pass it to a function that makes the function value.
+- Named functions are still declared at the top level, and still can't see the main
+  program's locals; only function values reach outside themselves.
+
+## Files
+
+`include "other.gb"` runs another file's top-level code in place, and each file keeps
+what it declares to itself unless it says otherwise:
+
+| In a file | Who can use it |
+|---|---|
+| `local x` at the top level | that file only |
+| `function f()` | that file only |
+| `global x` | every file |
+| `global function f()` | every file |
+| `type`, `const` | every file |
+
+```basic
+' enemies.gb
+local spawned:int = 0                    ' enemies.gb's own
+function pick_spot:int()                 ' a helper for this file only
+    return rnd(0, 100)
+endfunction
+global function spawn_enemy()            ' main.gb (and any other file) can call this
+    print("enemy at " + str(pick_spot()))
+endfunction
+```
+
+```basic
+' main.gb
+include "enemies.gb"
+spawn_enemy()      ' fine: a global function
+pick_spot()        ' error: 'pick_spot' is a function of enemies.gb, and only that file can call it
+```
+
+Two files may each have a private function (or top-level `local`) with the same name:
+each one uses its own. A `global function`'s name can be used only once, by any file.
 
 ## Types
 

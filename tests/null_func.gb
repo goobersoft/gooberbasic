@@ -1,0 +1,4 @@
+strict
+local f:int(int)
+print("before")
+print(f(1))
