@@ -1,0 +1,54 @@
+' Stress the garbage collector: lots of garbage strings, arrays and objects.
+' Objects are freed automatically once nothing refers to them (BlitzMax style).
+type t_node
+    field value:int
+    field label:string
+    field kids:t_node[]
+    field other:t_node
+endtype
+
+kept:t_node list = new t_node list
+total = 0
+for round = 1 to 200
+    local big:string[1000]
+    for i = 0 to 999
+        big[i] = "item " + i + " of round " + round
+    next
+    total = total + len(big[999])
+    n:t_node = new t_node
+    n.label = "node" + round
+    n.value = round
+    local ks:t_node[3]
+    n.kids = ks
+    if round mod 2 = 0 then list_add_last kept, n   ' the odd ones become garbage
+next
+n = null
+print "total=" + total
+count = 0 : sum = 0
+for n = eachin kept
+    count = count + 1 : sum = sum + n.value
+next
+print "kept nodes=" + count + " sum=" + sum
+
+' 200000 throwaway objects, including reference cycles, must all be reclaimed
+gc_collect
+before = gc_mem_alloced()
+for i = 1 to 100000
+    a:t_node = new t_node
+    b:t_node = new t_node
+    a.other = b : b.other = a
+next
+a = null : b = null
+gc_collect
+grew = gc_mem_alloced() - before
+if grew < 1024 then print "garbage reclaimed" else print "LEAK: " + grew + " bytes"
+
+' dropping the only reference to a list frees the list and everything in it
+clear_list kept
+kept = null
+gc_collect
+if gc_mem_alloced() < before then print "list freed"
+
+s$ = ""
+for i = 1 to 2000 : s$ = s$ + chr(65 + i mod 26) : next
+print len(s$) + " " + left(s$, 10)

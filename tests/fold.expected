@@ -1,0 +1,30 @@
+int div: 3 / 3 ok
+mod: -1 / -1 ok
+wrap add: -2147483648 / -2147483648 ok
+wrap mul: 0 / 0 ok
+min / -1: -2147483648 / -2147483648 ok
+min mod -1: 0 / 0 ok
+shl 33: 2 / 2 ok
+shr: 2147483644 / 2147483644 ok
+sar: -4 / -4 ok
+bitwise: 28 / 28 ok
+bnot: -6 / -6 ok
+not: 1 / 1 ok
+compare: 1 / 1 ok
+float: 3.5 / 3.5 ok
+float mix: 14.0 / 14.0 ok
+pow: 1024.0 / 1024.0 ok
+fmod: 1.5 / 1.5 ok
+neg: -3.25 / -3.25 ok
+0.1+0.2: 0.3 / 0.3 ok
+div 0.0: Infinity / Infinity ok
+-div 0.0: -Infinity / -Infinity ok
+nan: NaN / NaN ok
+f2i: 0 / 0 ok
+f2i sat: 2147483647 / 2147483647 ok
+concat: n12.5 / n12.5 ok
+concat2: a3 / a3 ok
+empty: n / n ok
+and: 4 / 4 ok
+or: 2 / 2 ok
+tests/fold.gb:48: runtime error: Integer division by zero

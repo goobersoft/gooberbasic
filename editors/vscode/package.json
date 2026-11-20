@@ -1,0 +1,38 @@
+{
+  "name": "gooberbasic",
+  "displayName": "GooberBASIC",
+  "description": "Syntax highlighting, auto-indent and snippets for GooberBASIC (.gb) programs",
+  "version": "0.2.0",
+  "publisher": "gooberbasic",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "gooberbasic",
+        "aliases": ["GooberBASIC", "gooberbasic"],
+        "extensions": [".gb"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gooberbasic",
+        "scopeName": "source.gooberbasic",
+        "path": "./syntaxes/gooberbasic.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "gooberbasic",
+        "path": "./snippets/gooberbasic.json"
+      }
+    ]
+  }
+}

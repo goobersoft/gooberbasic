@@ -1,0 +1,8 @@
+# build output
+build/
+goober
+*.png
+
+# Claude Code: personal settings and its own bookkeeping
+.claude/settings.local.json
+.claude/.cc-writes/

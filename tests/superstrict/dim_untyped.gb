@@ -1,0 +1,3 @@
+' expect: 'a' needs a type, e.g. dim a:int[10] (superstrict)
+superstrict
+dim a[10]

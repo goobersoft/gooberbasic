@@ -1,0 +1,92 @@
+{
+  "Game loop": {
+    "prefix": "game",
+    "description": "A window and a main loop that runs until Esc or the window is closed",
+    "body": [
+      "app_title(\"${1:My Game}\")",
+      "graphics(${2:640}, ${3:480})",
+      "",
+      "repeat",
+      "\tcls()",
+      "\t$0",
+      "\tflip()",
+      "until key_hit(KEY_ESCAPE) or app_terminate()"
+    ]
+  },
+  "Function": {
+    "prefix": "function",
+    "body": [
+      "function ${1:name}:${2:int}(${3})",
+      "\t$0",
+      "endfunction"
+    ]
+  },
+  "Type": {
+    "prefix": "type",
+    "description": "A type with fields (types hold data only)",
+    "body": [
+      "type t_${1:name}",
+      "\tfield ${2:x}:${3:float}",
+      "endtype"
+    ]
+  },
+  "If block": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition}",
+      "\t$0",
+      "endif"
+    ]
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": [
+      "for local ${1:i}:int = ${2:1} to ${3:10}",
+      "\t$0",
+      "next"
+    ]
+  },
+  "For eachin": {
+    "prefix": "eachin",
+    "description": "Loop over every item in a list",
+    "body": [
+      "for local ${1:item}:${2:t_name} = eachin ${3:list}",
+      "\t$0",
+      "next"
+    ]
+  },
+  "List": {
+    "prefix": "list",
+    "description": "Declare a typed list",
+    "body": [
+      "${1:local} ${2:items}:${3:int} list = new ${3:int} list"
+    ]
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition}",
+      "\t$0",
+      "wend"
+    ]
+  },
+  "Repeat loop": {
+    "prefix": "repeat",
+    "body": [
+      "repeat",
+      "\t$0",
+      "until ${1:condition}"
+    ]
+  },
+  "Select": {
+    "prefix": "select",
+    "body": [
+      "select ${1:value}",
+      "\tcase ${2:1}",
+      "\t\t$0",
+      "\tdefault",
+      "\t\t",
+      "endselect"
+    ]
+  }
+}

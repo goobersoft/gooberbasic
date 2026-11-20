@@ -1,0 +1,4 @@
+' a list holds a single type: this must not compile
+local q:int list = new int list
+list_add_first(q, 10)
+list_add_last(q, "some string") ' error here, invalid type.

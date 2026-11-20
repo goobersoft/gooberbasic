@@ -1,0 +1,68 @@
+byte 250+10 = 4
+uint8 -1 = 255
+sint8 127+1 = -128
+short 65535+1 = 0
+sint16 -32768-1 = 32767
+sint32 max+1 = -2147483648
+uint32 max = 4294967295
+uint32 max+1 = 0
+uint32 -1 = 4294967295
+byte 200+100 as an expression = 300
+-byte = -200
+sint64 max = 9223372036854775807
+sint64 max+1 = -9223372036854775808
+sint64 min = -9223372036854775808
+long max = 18446744073709551615
+long max+1 = 0
+uint64 -1 = 18446744073709551615
+uint64 / 2 = 9223372036854775807
+uint64 mod 10 = 5
+uint64 > 0 = 1
+sint64 -7 / 2 = -3, mod 2 = -1
+int * int overflow (int) = 0
+sint64 65536 * 65536 = 4294967296
+2^40 via shl = 1099511627776
+long literal = 5000000000
+hex 64-bit = 1099511627775
+hex 32-bit stays int = -1
+sint64 & mask = 255
+bitwise not of sint64 65536 = -65537
+long sar 1 = 9223372036854775807, shr 1 = 9223372036854775807
+mixed int + long = 6
+float 0.1 = 0.1, double 0.1 = 0.1
+float = 0.1 literal: 1
+double(float 0.1) = 0.1: 0
+float 16777216+1 = 16777216.0
+double 16777216+1 = 16777217.0
+float 1/3 * 3 = 1.0
+float*double = 0.01
+double from float 0.1 *1e9 = 100000001
+suffix # is float: 1.5
+byte(300) = 44
+sint8(200) = -56
+short(-1) = 65535
+uint32(-2) = 4294967294
+sint64(3.9) = 3
+long(-5.0) = 0
+int(long max) = -1
+double(2) / 3 = 0.666667
+float(2) / 3 = 0.666667
+string -> sint64 = -123456789012
+string -> long = 18446744073709551615
+string -> byte = 2
+abs(sint8 -128) = 128
+abs(sint64 -7) = 7, sgn = -1
+min(long max, 3) = 3, max = 18446744073709551615
+max(byte 4, -1) = 4
+sint64 loop total = 12884901885
+byte loop ran 6 times
+float loop sum = 2.5
+byte array = 255 0 255
+field byte = 44, field long = 18446744073709551615
+short list item 4464
+short list item 5
+contains 4464: 1
+function sint64 = 4500000000
+function returning byte = 255
+const long = 20000000000, const byte = 1
+select on long ok

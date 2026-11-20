@@ -1,0 +1,16 @@
+' hello.gb - the classic, plus a little bit of everything
+print("Hello from GooberBASIC!")
+
+name$ = input("What's your name? ")
+if name$ = "" then name$ = "Goober"
+print("Nice to meet you, " + name$ + "!")
+
+' FizzBuzz, BASIC style
+for i = 1 to 15
+    select true
+        case i mod 15 = 0 : print("FizzBuzz")
+        case i mod 3 = 0  : print("Fizz")
+        case i mod 5 = 0  : print("Buzz")
+        default           : print(i)
+    endselect
+next

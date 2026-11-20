@@ -1,0 +1,136 @@
+' goobercatch.gb - a tiny complete game.
+' Catch the falling goobers with your bucket, dodge the spiky ones.
+' Left/Right (or A/D) to move, Esc to quit, Space to restart.
+strict
+
+const W = 640, H = 480
+const BUCKET_W = 90, BUCKET_H = 24
+
+type t_drop
+    field x:float, y:float, speed:float
+    field bad:int
+endtype
+
+type t_spark
+    field x:float, y:float, dx:float, dy:float
+    field life:int
+endtype
+
+global bucket_x:float = W / 2
+global score:int, lives:int, best:int
+global spawn_timer:int, difficulty:float
+global game_over:int
+global drops:t_drop list = new t_drop list    ' objects live as long as something refers to them
+global sparks:t_spark list = new t_spark list
+
+function reset_game()
+    clear_list(drops)
+    clear_list(sparks)
+    score = 0 : lives = 3
+    spawn_timer = 0 : difficulty = 1.0
+    game_over = false
+    bucket_x = W / 2
+endfunction
+
+function burst(x:float, y:float, n:int)
+    for local i:int = 1 to n
+        local s:t_spark = new t_spark
+        s.x = x : s.y = y
+        local ang:float = rnd(0, 360), spd:float = rnd(1, 4)
+        s.dx = cos(ang) * spd : s.dy = sin(ang) * spd
+        s.life = rand(20, 40)
+        list_add_last(sparks, s)
+    next
+endfunction
+
+function update_game()
+    if key_down(KEY_LEFT) or key_down(KEY_A) then bucket_x :- 7
+    if key_down(KEY_RIGHT) or key_down(KEY_D) then bucket_x :+ 7
+    bucket_x = max(BUCKET_W / 2, min(bucket_x, W - BUCKET_W / 2))
+
+    spawn_timer :- 1
+    if spawn_timer <= 0
+        local d:t_drop = new t_drop
+        d.x = rnd(20, W - 20) : d.y = -20
+        d.speed = rnd(2, 3.5) * difficulty
+        d.bad = rand(1, 5) = 1
+        list_add_last(drops, d)
+        spawn_timer = int(45 / difficulty)
+    endif
+    difficulty = min(difficulty + 0.0005, 3.0)
+
+    local top:float = H - 40
+    for local d:t_drop = eachin drops
+        d.y :+ d.speed
+        if d.y > top and d.y < top + BUCKET_H and abs(d.x - bucket_x) < BUCKET_W / 2
+            if d.bad
+                lives :- 1
+                burst(d.x, d.y, 30)
+                if lives <= 0 then game_over = true : best = max(best, score)
+            else
+                score :+ 10
+                burst(d.x, d.y, 8)
+            endif
+            list_remove(drops, d)
+        elseif d.y > H + 20
+            list_remove(drops, d)
+        endif
+    next
+endfunction
+
+function draw_game()
+    for local d:t_drop = eachin drops
+        if d.bad
+            set_color(230, 60, 60)
+            draw_circle(d.x, d.y, 11)
+            set_color(255, 200, 200)
+            draw_line(d.x - 14, d.y, d.x + 14, d.y)
+            draw_line(d.x, d.y - 14, d.x, d.y + 14)
+        else
+            set_color(120, 220, 90)
+            draw_oval(d.x - 10, d.y - 13, 20, 26)
+            set_color(20, 40, 20)
+            draw_circle(d.x - 4, d.y - 3, 2)
+            draw_circle(d.x + 4, d.y - 3, 2)
+        endif
+    next
+    for local s:t_spark = eachin sparks
+        s.x :+ s.dx : s.y :+ s.dy : s.dy :+ 0.1
+        s.life :- 1
+        set_color(255, 230, 120)
+        set_alpha(s.life / 40.0)
+        draw_rect(s.x, s.y, 3, 3)
+        if s.life <= 0 then list_remove(sparks, s)
+    next
+    set_alpha(1)
+    set_color(200, 160, 90)
+    draw_rect(bucket_x - BUCKET_W / 2, H - 40, BUCKET_W, BUCKET_H)
+    set_color(140, 100, 50)
+    draw_rect(bucket_x - BUCKET_W / 2, H - 40, BUCKET_W, 5)
+
+    set_color(255, 255, 255)
+    draw_text("Score: " + score, 10, 10)
+    draw_text("Lives: " + repeat_string("@ ", lives), 10, 30)
+    draw_text("Best: " + best, W - 120, 10)
+    if game_over
+        draw_text("GAME OVER", W / 2, H / 2 - 20, true, true)
+        draw_text("Press Space to play again", W / 2, H / 2 + 10, true, true)
+    endif
+endfunction
+
+app_title("Goober Catch")
+graphics(W, H)
+set_cls_color(30, 30, 60)
+seed_rnd(millisecs())
+reset_game()
+
+repeat
+    if game_over
+        if key_hit(KEY_SPACE) then reset_game()
+    else
+        update_game()
+    endif
+    cls()
+    draw_game()
+    flip()
+until key_hit(KEY_ESCAPE) or app_terminate()

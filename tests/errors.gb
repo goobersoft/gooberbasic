@@ -1,0 +1,10 @@
+' runtime error should report the right line inside a function
+type t_thing
+    field a
+endtype
+function boom(t:t_thing)
+    return t.a
+endfunction
+x:t_thing = new t_thing
+x = null
+print boom(x)

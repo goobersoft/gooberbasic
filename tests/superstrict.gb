@@ -1,0 +1,34 @@
+' superstrict: everything typed runs; eachin and constants may leave the type out
+superstrict
+const LIMIT = 3
+type t_thing
+    field name:string, hp:int
+endtype
+global total:int = 0
+local names$ = "suffix"
+function add:int(a:int, b:int = 10)
+    return a + b
+endfunction
+function tally(n:int)
+    total :+ n
+    if n > 100 then return
+endfunction
+function pair:int[]()
+    local a:int[2]
+    a[1] = 7
+    return a
+endfunction
+for local i:int = 1 to LIMIT
+    tally(i)
+next
+print total
+print add(1) + add(1, 2)
+local l:t_thing list = new t_thing list
+local t:t_thing = new t_thing
+t.name = "bob"
+list_add_last(l, t)
+for local x = eachin l
+    print x.name
+next
+print pair()[1]
+print names$

@@ -1,0 +1,1 @@
+tests/list_type_error.gb:4: error: list_add_last: cannot put a string into an int list

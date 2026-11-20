@@ -1,0 +1,16 @@
+' Draws one frame of everything, saves a screenshot, and exits.
+' Run headless with: SDL_VIDEODRIVER=offscreen ./goober tests/gfx_smoke.gb out.png
+graphics 400, 300
+set_cls_color 30, 30, 60
+cls
+set_color 255, 80, 80 : draw_rect 20, 20, 100, 60
+set_color 80, 255, 80 : draw_rect 140, 20, 100, 60, false
+set_color 80, 160, 255 : draw_oval 260, 20, 120, 60
+set_color 255, 255, 0 : draw_circle 70, 160, 40, false
+set_color 255, 0, 255 : draw_line 140, 120, 380, 200
+set_alpha 0.5 : set_color 255, 255, 255 : draw_circle 200, 170, 50 : set_alpha 1
+set_color 255, 255, 255
+draw_text "GooberBASIC " + graphics_width() + "x" + graphics_height(), 200, 260, true
+for i = 0 to 99 : plot 20 + i * 3, 290 : next
+if save_screenshot(input()) then print "saved" else print "save failed"
+flip

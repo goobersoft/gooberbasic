@@ -1,0 +1,2 @@
+tests/errors.gb:6: runtime error: Object does not exist (null)
+  called from boom at tests/errors.gb:10

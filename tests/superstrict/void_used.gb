@@ -1,0 +1,5 @@
+' expect: f has no return type, so it does not return a value (superstrict)
+superstrict
+function f()
+endfunction
+local y:int = f()

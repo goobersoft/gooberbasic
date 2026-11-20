@@ -1,0 +1,4 @@
+' expect: 'n' needs a type, e.g. function f(n:int) (superstrict)
+superstrict
+function f(n)
+endfunction

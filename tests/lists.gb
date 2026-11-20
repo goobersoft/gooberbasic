@@ -1,0 +1,96 @@
+' typed lists: ordering, removal while iterating, value lists
+strict
+type t_a
+    field n:int
+endtype
+
+function make_a:t_a(n:int)
+    local a:t_a = new t_a
+    a.n = n
+    return a
+endfunction
+
+function dump(l:t_a list)
+    local out:string = ""
+    for local a:t_a = eachin l
+        out :+ a.n + " "
+    next
+    print "[" + trim(out) + "] count=" + count_list(l)
+endfunction
+
+local l:t_a list = new t_a list
+for local i:int = 1 to 6
+    list_add_last l, make_a(i)
+next
+list_add_first l, make_a(0)
+dump l
+
+' removing the current element inside eachin is safe
+for local a:t_a = eachin l
+    if a.n mod 2 = 1 then list_remove l, a
+next
+dump l
+
+' removing an element ahead of the loop skips it
+local four:t_a
+for local a:t_a = eachin l
+    if a.n = 4 then four = a
+next
+for local a:t_a = eachin l
+    write a.n + " "
+    if a.n = 2 then list_remove l, four
+next
+print ""
+print "contains four: " + list_contains(l, four)
+
+' clear_list while iterating ends the loop cleanly
+local seen:int = 0
+for local a:t_a = eachin l
+    seen :+ 1
+    clear_list l
+next
+print "seen=" + seen + " empty=" + list_is_empty(l)
+
+' lists of values; list_remove and list_contains compare by value
+local q:int list = new int list
+list_add_first(q, 10)
+list_add_last(q, 20)
+list_add_last(q, 30)
+list_add_last(q, 20)
+list_remove(q, 20)          ' removes the first 20 only
+local s:string = ""
+for local n:int = eachin q : s :+ n + " " : next
+print "ints: " + s + "contains 20: " + list_contains(q, 20)
+
+local f:float list = new float list
+list_add_last(f, 1)         ' an int is fine in a float list
+list_add_last(f, 2.5)
+s = ""
+for local x:float = eachin f : s :+ x + " " : next
+print "floats: " + s
+
+local words:string list = new string list
+list_add_last(words, "goober")
+list_add_last(words, "")    ' the empty string is a value too
+list_add_last(words, "basic")
+list_remove(words, "goober")
+s = ""
+for local w:string = eachin words : s :+ "[" + w + "]" : next
+print "strings: " + s + " count=" + count_list(words)
+
+' a list in a field, and an array of lists
+type t_bag
+    field items:string list
+endtype
+local bag:t_bag = new t_bag
+bag.items = new string list
+list_add_last(bag.items, "key")
+print "bag: " + count_list(bag.items)
+local rows:int list[2]
+rows[1] = new int list
+list_add_last(rows[1], 5)
+print "rows[1]: " + count_list(rows[1])
+
+local nothing:t_a list
+for local a:t_a = eachin nothing
+next

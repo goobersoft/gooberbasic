@@ -1,0 +1,4 @@
+' expect: 'f' returns an array, so it needs a type
+superstrict
+function f[]()
+endfunction

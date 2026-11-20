@@ -1,0 +1,4 @@
+' expect: 'i' needs a type, e.g. for local i:int = ... (superstrict)
+superstrict
+for local i = 1 to 3
+next

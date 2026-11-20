@@ -1,0 +1,3 @@
+' expect: 'g' needs a type, e.g. global g:int (superstrict)
+superstrict
+global g

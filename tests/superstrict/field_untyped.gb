@@ -1,0 +1,5 @@
+' expect: 'hp' needs a type, e.g. field hp:int (superstrict)
+superstrict
+type t_x
+    field hp
+endtype

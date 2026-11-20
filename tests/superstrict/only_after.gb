@@ -1,0 +1,6 @@
+' expect: 'late' needs a type
+local early = 1   ' before superstrict: still allowed
+function before_it(n)
+endfunction
+superstrict
+local late = 2

@@ -1,0 +1,3 @@
+' expect: Identifier 'zz' has not been declared (strict mode)
+superstrict
+print zz

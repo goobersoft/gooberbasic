@@ -1,0 +1,62 @@
+' types.gb - Types are simple records (fields only, no methods).
+' Objects are freed automatically once nothing refers to them, so keep the
+' ones you want in a list (or a variable, field or array).
+strict
+
+type t_monster
+    field name:string
+    field hp:int
+    field speed:float
+endtype
+
+function spawn_monster:t_monster(name:string, hp:int, speed:float = 1.0)
+    local m:t_monster = new t_monster
+    m.name = name
+    m.hp = hp
+    m.speed = speed
+    return m
+endfunction
+
+' Functions that work on a Type take it as a parameter (no methods).
+function describe:string(m:t_monster)
+    return m.name + " (hp " + m.hp + ", speed " + m.speed + ")"
+endfunction
+
+local monsters:t_monster list = new t_monster list
+list_add_last(monsters, spawn_monster("Blob", 10))
+list_add_last(monsters, spawn_monster("Goober", 25, 2.5))
+list_add_last(monsters, spawn_monster("Slime", 3, 0.5))
+list_add_last(monsters, spawn_monster("Gnasher", 40, 1.75))
+
+print("All monsters:")
+for local m:t_monster = eachin monsters
+    print("  " + describe(m))
+next
+
+' Remove the weak ones while iterating - this is safe in GooberBASIC.
+' Once removed, nothing refers to them and the GC frees them.
+for local m:t_monster = eachin monsters
+    if m.hp < 15 then list_remove(monsters, m)
+next
+
+print("Survivors:")
+for local m:t_monster = eachin monsters
+    print("  " + describe(m))
+next
+
+print(count_list(monsters) + " monsters left")
+
+' Arrays
+local scores:int[5]
+for local i:int = 0 to len(scores) - 1
+    scores[i] = (i + 1) * (i + 1)
+next
+print("Sum of squares: " + sum(scores))
+
+function sum:int(values:int[])
+    local total:int = 0
+    for local i:int = 0 to len(values) - 1
+        total :+ values[i]
+    next
+    return total
+endfunction

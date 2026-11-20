@@ -1,0 +1,48 @@
+' Constant folding must give exactly what the VM computes at run time.
+' Each check prints the folded value (literals) and the run-time value
+' (the same numbers through variables), which must match.
+function check(name$, folded$, runtime$)
+    mark$ = "ok"
+    if folded$ <> runtime$ then mark$ = "MISMATCH"
+    print name$ + ": " + folded$ + " / " + runtime$ + " " + mark$
+endfunction
+
+a = 7 : b = 2 : big = 2147483647 : low = -2147483648 : m1 = -1
+check "int div", 7 / 2, a / b
+check "mod", -7 mod 2, -a mod b
+check "wrap add", 2147483647 + 1, big + 1
+check "wrap mul", 65536 * 65536, (b * 32768) * (b * 32768)
+check "min / -1", -2147483648 / -1, low / m1
+check "min mod -1", -2147483648 mod -1, low mod m1
+check "shl 33", 1 shl 33, 1 shl (33 + a - a)
+check "shr", -8 shr 1, -8 shr (b - 1)
+check "sar", -8 sar 1, -8 sar (b - 1)
+check "bitwise", (12 & 10) + (12 | 10) + (12 ~ 10), (12 & (a + 3)) + (12 | (a + 3)) + (12 ~ (a + 3))
+check "bnot", ~5, ~(a - 2)
+check "not", not 0, not (a - a)
+check "compare", (3 < 4) + (3 = 4) * 10, (3 < (a - 3)) + (3 = (a - 3)) * 10
+
+x# = 1.5 : z# = 0
+check "float", 7 / 2.0, a / (b * 1.0)
+check "float mix", 10 * 1.5 - 1, 10 * x# - 1
+check "pow", 2 ^ 10, b ^ 10
+check "fmod", 7.5 mod 2, (a + 0.5) mod b
+check "neg", -(3.25), -(x# + 1.75)
+check "0.1+0.2", 0.1 + 0.2, (x# - 1.4) + 0.2
+check "div 0.0", 1 / 0.0, 1 / z#
+check "-div 0.0", -1 / 0.0, -1 / z#
+check "nan", 0 / 0.0, z# / z#
+check "f2i", int(2.9) + int(-2.9), int(x# + 1.4) + int(-x# - 1.4)
+check "f2i sat", int(1e12), int(x# * 1e12)
+
+s$ = "n"
+check "concat", "n" + 1 + 2.5, s$ + 1 + 2.5
+check "concat2", "a" + (1 + 2), "a" + (a - 4)
+check "empty", "" + "n" + "", "" + s$ + ""
+
+' a label in the middle must stop folding: the and/or jump lands between constants
+check "and", (1 and 2) + 3, (a and b) + 3
+check "or", (0 or 5) * 2, ((a - a) or 5) * 2
+
+' still a run-time error, with the right line
+print 10 / (5 - 5)

@@ -1,0 +1,3 @@
+' expect: 'x' needs a type, e.g. local x:int (superstrict)
+superstrict
+local x = 1.5
