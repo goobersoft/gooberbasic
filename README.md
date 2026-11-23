@@ -603,3 +603,10 @@ Debugging aids: `GOOBER_GC_STRESS=1` runs the garbage collector on every allocat
 - File I/O (`read_file`, `write_line`, ...), `split` returning `string[]`.
 - Render-to-image (`create_image`, `set_buffer`), pixel collision, animated image strips.
 - `goto`/`gosub` and `data`/`read` for classic-BASIC compatibility.
+
+## License
+
+GooberBASIC is free software, under the [GNU General Public License, version 3](LICENSE), with the [GooberEngine Game Exception](GAME-EXCEPTION.txt), which it shares with GooberEngine.
+
+- **The interpreter stays free.** If you share GooberBASIC or a modified version of it, you must do so under the GPLv3, with its source.
+- **Your programs are yours.** A program isn't covered by the GPLv3 just because it's written in GooberBASIC or run by it. License it however you want. The programs in `examples/` can be copied into your own freely.
