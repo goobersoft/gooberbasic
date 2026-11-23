@@ -1,0 +1,7 @@
+' assert passes quietly when true, stops with the line and message when false
+assert(true)
+assert(1 + 1 = 2, "maths broke")
+print("passed")
+hp = -3
+assert(hp >= 0, "hp went negative: " + hp)
+print("not reached")

@@ -1,0 +1,4 @@
+' expect: 'later' has not been declared
+strict
+print(later)                 ' the main program sees a local only from its line on
+local later:int = 1

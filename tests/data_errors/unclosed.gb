@@ -1,0 +1,3 @@
+' expect: never closed (expected enddata)
+defdata A
+  1, 2

@@ -31,6 +31,8 @@ struct VM {
     int ngray, capGray;
     bool gcStress;      /* GOOBER_GC_STRESS=1: collect on every allocation */
 
+    int dataPos;        /* the next defdata item read_int/read_float/read_string returns */
+
     uint8_t *ip;        /* synced before native calls, for error lines */
     int exitCode;
     jmp_buf exitJmp;
@@ -63,6 +65,7 @@ void vm_free(VM *vm);
 void vm_error(VM *vm, const char *fmt, ...) __attribute__((noreturn, format(printf, 2, 3)));
 void vm_exit(VM *vm, int code) __attribute__((noreturn));
 void disassemble(Program *prog);
+Value vm_convert(VM *vm, Value v, uint8_t to);
 
 /* builtins.c / gfx.c */
 extern NativeDef gb_core_natives[];
@@ -73,5 +76,11 @@ int native_count(void);
 int native_find(const char *lname);
 void gfx_pump_events(void);
 void gfx_shutdown(void);
+
+/* net.c: networking, shared by goober and GooberEngine */
+extern NativeDef gb_net_natives[];
+extern ConstDef gb_net_consts[];
+void net_poll(void);       /* read and write the sockets (flip and delay call it) */
+void net_shutdown(void);   /* leave the game, close everything */
 
 #endif

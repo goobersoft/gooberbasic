@@ -1,0 +1,3 @@
+' expect: 'x' is not a constant
+local x = 1
+defdata A : x : enddata

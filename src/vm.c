@@ -205,6 +205,29 @@ static int32_t f2i(double f) {
     return (int32_t)f;
 }
 
+/* Convert an int, long, float or string value to `to` (K_INT, K_FLOAT or
+ * K_STRING) the way an assignment would: floats saturate into an int, longs
+ * wrap, strings are read leniently. Used by read_int / read_float / read_string. */
+Value vm_convert(VM *vm, Value v, uint8_t to) {
+    switch (to) {
+        case K_INT:
+            if (v.kind == K_FLOAT) return v_int(f2i(v.as.f));
+            if (v.kind == K_LONG) return v_int((int32_t)(uint32_t)(uint64_t)v.as.i64);
+            if (v.kind == K_STRING) return v_int(str_to_int(v.as.s));
+            return v;
+        case K_FLOAT:
+            if (v.kind == K_INT) return v_float((double)v.as.i);
+            if (v.kind == K_LONG) return v_float((double)v.as.i64);
+            if (v.kind == K_STRING) return v_float(str_to_float(v.as.s));
+            return v;
+        default:
+            if (v.kind == K_INT) return v_str(int_to_str(vm, v.as.i));
+            if (v.kind == K_LONG) return v_str(long_to_str(vm, v.as.i64));
+            if (v.kind == K_FLOAT) return v_str(float_to_str(vm, v.as.f));
+            return v;
+    }
+}
+
 /* First link at or after `k` that is still in its list. */
 static ObjLink *iter_skip(ObjLink *k) {
     while (k && !k->list) k = k->next;
@@ -284,6 +307,11 @@ int vm_run(VM *vm) {
     uint8_t *ip = prog->code + mainFd->entry;
     Value *base = frame->base;
     ObjClosure *cl = NULL;   /* the function value being run (for its upvalues) */
+    int poll_left = GB_POLL_EVERY;
+    /* a loop jumping back: let the host look for a stop request now and then */
+#define BACK_EDGE() do { \
+        if (gb_poll_hook && --poll_left <= 0) { poll_left = GB_POLL_EVERY; vm->sp = sp; gb_poll_hook(); } \
+    } while (0)
 
     for (;;) {
         uint8_t op = *ip++;
@@ -422,11 +450,20 @@ int vm_run(VM *vm) {
             case OP_TRUTH_S: TOP = v_int(str_len(TOP.as.s) != 0); break;
             case OP_TRUTH_O: TOP = v_int(TOP.as.obj != NULL); break;
 
-            case OP_JMP: { int32_t t = read_i32(ip); ip = prog->code + t; break; }
+            case OP_JMP: {
+                uint8_t *to = prog->code + read_i32(ip);
+                if (to < ip) BACK_EDGE();          /* while / for / loop */
+                ip = to;
+                break;
+            }
             case OP_JF: {
                 int32_t t = READ_I32();
                 sp--;
-                if (sp->as.i == 0) ip = prog->code + t;
+                if (sp->as.i == 0) {
+                    uint8_t *to = prog->code + t;
+                    if (to < ip) BACK_EDGE();      /* do ... loop until */
+                    ip = to;
+                }
                 break;
             }
             case OP_JT: {
@@ -470,6 +507,9 @@ int vm_run(VM *vm) {
             }
             case OP_GET_UPVAL: { int32_t u = READ_I32(); PUSH(*cl->up[u]->loc); break; }
             case OP_SET_UPVAL: { int32_t u = READ_I32(); *cl->up[u]->loc = POP(); break; }
+            /* the main program's frame is the bottom of the stack for the whole run */
+            case OP_LOAD_MAIN: { int32_t s = READ_I32(); PUSH(vm->stack[s]); break; }
+            case OP_STORE_MAIN: { int32_t s = READ_I32(); vm->stack[s] = POP(); break; }
             case OP_NATIVE: {
                 int32_t n = READ_I32();
                 int32_t argc = READ_I32();
@@ -597,7 +637,7 @@ static const char *op_names[] = {
     "BANDL", "BORL", "BXORL", "BNOTL", "SHLL", "SHRL", "SARL",
     "I2L", "L2I", "L2F", "U2F", "F2L", "F2U", "L2S", "U2S", "S2L", "S2U", "TRUTH_L",
     "TRUTH_I", "TRUTH_F", "TRUTH_S", "TRUTH_O",
-    "JMP", "JF", "JT", "CALL", "CALL_VALUE", "CLOSURE", "GET_UPVAL", "SET_UPVAL", "NATIVE", "RET",
+    "JMP", "JF", "JT", "CALL", "CALL_VALUE", "CLOSURE", "GET_UPVAL", "SET_UPVAL", "LOAD_MAIN", "STORE_MAIN", "NATIVE", "RET",
     "NEW", "GETF", "SETF", "ITER_FIRST", "ITER_NEXT", "LINK_VALUE",
     "NEWARR", "AGET", "ASET", "ALEN", "END",
 };
@@ -608,7 +648,7 @@ static int op_operands(uint8_t op) {
         case OP_LOAD_LOCAL: case OP_STORE_LOCAL: case OP_LOAD_GLOBAL: case OP_STORE_GLOBAL:
         case OP_JMP: case OP_JF: case OP_JT: case OP_NEW:
         case OP_GETF: case OP_SETF: case OP_AGET: case OP_ASET: case OP_NARROW:
-        case OP_CALL_VALUE: case OP_GET_UPVAL: case OP_SET_UPVAL:
+        case OP_CALL_VALUE: case OP_GET_UPVAL: case OP_SET_UPVAL: case OP_LOAD_MAIN: case OP_STORE_MAIN:
             return 1;
         case OP_CALL: case OP_NATIVE: case OP_NEWARR:
             return 2;

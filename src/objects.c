@@ -32,6 +32,7 @@ char *gb_strndup(const char *s, size_t n) {
 
 void (*gb_diag_hook)(const char *text) = NULL;
 jmp_buf *gb_error_jmp = NULL;
+void (*gb_poll_hook)(void) = NULL;
 
 void gb_vdiag(const char *fmt, va_list ap) {
     if (!gb_diag_hook) { vfprintf(stderr, fmt, ap); return; }

@@ -1,0 +1,74 @@
+' defdata blocks: restore, read_int / read_float / read_string, data_count
+strict
+const SIZE = 3
+
+' a block can be used above the line it's written on
+restore(ENEMIES)
+print(read_string() + " " + str(read_int()) + " " + str(read_float()))
+
+restore(LEVEL_1)
+local w:int = read_int(), h:int = read_int()
+print("level " + str(w) + "x" + str(h))
+for local y:int = 1 to h
+    local row$ = ""
+    for local x:int = 1 to w
+        row$ = row$ + str(read_int())
+    next
+    print(row$)
+next
+
+' blocks are numbered in order, so LEVEL_1 + 1 is LEVEL_2
+restore(LEVEL_1 + 1)
+print("level 2 starts " + str(read_int()) + ", " + str(data_count(LEVEL_2)) + " items")
+print("counts: " + str(data_count(LEVEL_1)) + " " + str(data_count(EMPTY)))
+
+' values convert like an assignment
+restore(MIXED)
+print(read_int())        ' 2.9 -> 2
+print(read_float())      ' "1.5" -> 1.5
+print(read_string())     ' -7
+print(read_int())        ' SIZE * 2
+print(read_string())     ' a long
+print(read_string() + "|")
+
+' reading runs on into the next block, then restore() starts over
+restore(ENEMIES)
+for local i:int = 1 to 3 : read_string() : next
+print("after enemies: " + read_string())
+restore()
+print("first item: " + read_string())
+
+function lookup$(n:int)
+    restore(ENEMIES)
+    for local i:int = 1 to n * 3 : read_string() : next
+    return read_string()
+endfunction
+print(lookup(1))
+
+restore(TAIL)
+print(read_int())
+read_int()
+
+defdata ENEMIES
+    "slime", 3, 0.5
+    "bat",   2, 1.25
+enddata
+
+defdata LEVEL_1
+    SIZE, 2
+    1, 0, 1
+    0, 1, 0
+enddata
+
+defdata LEVEL_2 : 9, 8, 7 : enddata
+defdata EMPTY
+end data
+
+defdata MIXED
+    2.9, "1.5", -7, SIZE * 2
+    5000000000, ""
+enddata
+
+defdata TAIL
+    42
+enddata

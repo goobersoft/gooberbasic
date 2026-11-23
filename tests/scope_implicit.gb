@@ -1,0 +1,27 @@
+' Without strict, a name used without local is a global, even inside a function
+function bump()
+    hits = hits + 1          ' hits: made a global here
+    for i = 1 to 3           ' i: a global counter
+    next
+    label:string = "set in bump"
+    dim grid:int[2]
+    grid[1] = 42
+endfunction
+function keep_to_self()
+    local hits:int = 100     ' local shadows the global
+    for local i = 1 to 9
+    next
+    print(hits)
+endfunction
+bump()
+bump()
+keep_to_self()
+print(hits)
+print(i)
+print(label)
+print(grid[1])
+total# = 1.5                 ' a suffix gives a global its type
+function show_total()
+    print(total#)
+endfunction
+show_total()

@@ -1,0 +1,9 @@
+local name:string = "lib"     ' lib's own: main's name is another variable
+local count:int = 0
+function lib_count:int()
+    count = count + 1
+    return count
+endfunction
+function lib_name:string()
+    return name
+endfunction

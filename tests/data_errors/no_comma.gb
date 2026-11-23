@@ -1,0 +1,4 @@
+' expect: Expected ',' or the end of the line between defdata items
+defdata A
+  1 2
+enddata

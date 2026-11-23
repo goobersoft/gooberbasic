@@ -1,4 +1,4 @@
-' expect: function 'secret' is also defined in private.gb; a global function's name can be used only once
+' expect: function 'secret' is also defined in private.gb; write local function in each file to keep them apart
 include "lib/private.gb"
-global function secret()
+function secret()
 endfunction

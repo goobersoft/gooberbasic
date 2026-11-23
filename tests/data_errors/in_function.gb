@@ -1,0 +1,4 @@
+' expect: defdata must be at the top level
+function f()
+  defdata A : 1 : enddata
+endfunction

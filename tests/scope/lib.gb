@@ -2,12 +2,12 @@ strict
 local count:string = "lib's count"
 print(count)
 global total:int = 0
-function helper:string()
+local function helper:string()
     return "lib's helper"
 endfunction
-global function lib_report:string()
+function lib_report:string()
     return "lib_report calls " + helper()
 endfunction
-global function add(n:int)
+global function add(n:int)      ' global is optional: plain function is shared too
     total = total + n
 endfunction

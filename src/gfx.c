@@ -168,6 +168,7 @@ static Value g_flip(VM *vm, int argc, Value *args) {
         G.vsync = want;
     }
     SDL_RenderPresent(G.ren);
+    net_poll();
     gfx_pump_events();
     RET_VOID;
 }

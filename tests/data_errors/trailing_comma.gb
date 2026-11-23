@@ -1,0 +1,3 @@
+' expect: Expected a value after ','
+defdata A
+  1, enddata

@@ -10,7 +10,7 @@ endtype
 global balls:t_ball list = new t_ball list
 
 function add_ball(x#, y#)
-    b:t_ball = new t_ball
+    local b:t_ball = new t_ball
     b.x = x : b.y = y
     b.dx = rnd(-4, 4) : b.dy = rnd(-4, 4)
     b.r = rnd(8, 30)

@@ -68,7 +68,7 @@ See its [README](editors/vscode/README.md) for installing it and running program
 - Comments start with `'`. Block comments go between `rem` and `endrem`.
 - End a line with `..` to continue it on the next line.
 - `include "other.gb"` pastes another file in place (each file is included only once).
-  Each file keeps its own top-level `local`s and its own functions; see [Files](#files).
+  Everything is shared between files unless it's declared `local`; see [Files](#files).
 
 ## Naming style
 
@@ -107,13 +107,15 @@ Every built-in name follows this style, so old Blitz spellings like `DrawRect` o
 local count = 0            ' int by default
 local speed# = 2.5         ' suffix style
 local name:string = "Bob"  ' annotation style
-global score:int           ' visible inside functions too
+global score:int           ' global is optional: no local means global
 const MAX_ENEMIES = 50, TITLE$ = "Goober"
-p:t_player = new t_player  ' declare-on-first-use, Blitz style
+p:t_player = new t_player  ' declare-on-first-use: a global
 ```
 
-- Without `strict`, using a variable you never declared creates it as a local
-  (typed by its suffix, otherwise `int`), like BlitzBasic.
+- **A name is global unless it has `local` in front of it.** Without `strict`, using a
+  variable you never declared creates it as a global (typed by its suffix, otherwise
+  `int`), even inside a function. So does a `for` counter written without `local`, and
+  `dim`. Write `local` (or `for local`) to keep a variable to its function.
 - Put `strict` at the top of a file to require `local`/`global` declarations.
 - Put `superstrict` there instead to also require a type on everything you
   declare, so nothing quietly becomes an `int`. It does all that `strict` does, and:
@@ -137,9 +139,15 @@ function alive:int(e:t_enemy)
 endfunction
 ```
 - `local` variables belong to the function they're in (or to the main program).
-  Main-program locals are **not** visible inside functions; use `global` for that.
-- A top-level `local` also belongs to its file: another file that includes it, or that
-  it includes, can't see it. `global` variables are shared by every file.
+- A top-level `local` belongs to its file: the functions written in that file see it,
+  wherever they stand (like a closure sees the variables around it), but another file
+  that includes it, or that it includes, can't. The main program itself sees it only
+  from its line on. Every other variable is a global, shared by every function
+  and every file.
+- A `local` hides a global of the same name inside its function (or file).
+- Watch loop counters in functions: `for i = 1 to 10` uses the global `i`, so a function
+  that loops with `i` and is called from another `i` loop changes the caller's counter.
+  Write `for local i = 1 to 10` in functions.
 - Values convert automatically on assignment: between any two number types, and
   numbers ↔ `string`. `float` → integer truncates toward zero. Every type name
   also converts explicitly: `int()`, `byte()`, `sint64()`, `double()`, ..., plus `str()`.
@@ -242,8 +250,8 @@ draw_badge(10, 20)     ' a call on its own line still needs its parentheses
   (see [Function values and closures](#function-values-and-closures)).
 - Functions can be called before (above) the place they're defined.
 - Arrays and objects are passed by reference; numbers and strings by value.
-- A function belongs to the file it's written in, and only that file can call it.
-  Write `global function` to let every file call it (see [Files](#files)).
+- Every file can call a function. Write `local function` to keep it to the file it's
+  written in (see [Files](#files)).
 
 ## Function values and closures
 
@@ -304,24 +312,24 @@ print(a()) : print(a()) : print(b())      ' 1, 2, 10
 
 ## Files
 
-`include "other.gb"` runs another file's top-level code in place, and each file keeps
-what it declares to itself unless it says otherwise:
+`include "other.gb"` runs another file's top-level code in place. Everything a file
+declares is shared with every other file, unless it's declared `local`:
 
 | In a file | Who can use it |
 |---|---|
-| `local x` at the top level | that file only |
-| `function f()` | that file only |
-| `global x` | every file |
-| `global function f()` | every file |
+| `local x` at the top level | that file only (its functions included) |
+| `local function f()` | that file only |
+| `x = 1`, `global x` | every file |
+| `function f()`, `global function f()` | every file |
 | `type`, `const` | every file |
 
 ```basic
 ' enemies.gb
 local spawned:int = 0                    ' enemies.gb's own
-function pick_spot:int()                 ' a helper for this file only
+local function pick_spot:int()           ' a helper for this file only
     return rnd(0, 100)
 endfunction
-global function spawn_enemy()            ' main.gb (and any other file) can call this
+function spawn_enemy()                   ' main.gb (and any other file) can call this
     print("enemy at " + str(pick_spot()))
 endfunction
 ```
@@ -329,12 +337,13 @@ endfunction
 ```basic
 ' main.gb
 include "enemies.gb"
-spawn_enemy()      ' fine: a global function
-pick_spot()        ' error: 'pick_spot' is a function of enemies.gb, and only that file can call it
+spawn_enemy()      ' fine: a shared function
+pick_spot()        ' error: 'pick_spot' is a local function of enemies.gb, and only that file can call it
 ```
 
-Two files may each have a private function (or top-level `local`) with the same name:
-each one uses its own. A `global function`'s name can be used only once, by any file.
+Two files may each have a `local function` (or top-level `local`) with the same name:
+each one uses its own. A shared function's name can be used only once, by any file.
+(`global` in front of a variable or function is still allowed; it changes nothing.)
 
 ## Types
 
@@ -413,7 +422,7 @@ carries on correctly. Using `eachin` on a `null` list is a runtime error.
 
 ```basic
 local scores:int[10]           ' indexes 0..9
-dim grid:int[20, 15]           ' dim works too; at top level it makes a global
+dim grid:int[20, 15]           ' dim works too, and makes a global
 grid[3, 4] = 1
 print(len(scores))             ' 10
 print(len(grid, 2))            ' size of dimension 2 -> 15
@@ -423,6 +432,46 @@ local names:string[]           ' an array variable with no array yet (null)
 Arrays are zero-based and bounds-checked. They can hold any type, including objects.
 `local a:int[n]` creates a fresh array each time it runs.
 
+## Data blocks
+
+`defdata NAME ... enddata` (or `end data`) writes a table of values straight into
+the code, like BASIC's `DATA`. Point at a block with `restore`, then take the values
+out one at a time, in order, with `read_int()`, `read_float()` or `read_string()`:
+
+```basic
+restore(LEVEL_1)
+local w:int = read_int(), h:int = read_int()
+for local y:int = 0 to h - 1
+    for local x:int = 0 to w - 1
+        grid[x, y] = read_int()
+    next
+next
+
+defdata LEVEL_1
+    4, 2                  ' width, height
+    1, 1, 1, 1
+    1, 0, 0, 1
+enddata
+
+defdata ENEMIES
+    "slime", 3, 0.5       ' name, hp, speed
+    "bat",   2, 1.25
+enddata
+```
+
+- Items are separated by commas or line ends (several on a line take commas). Each
+  item is a number, a string or a constant expression (`-1`, `SIZE * 2`, `KEY_SPACE`).
+- A block can be written anywhere at the top level, above or below the code that reads it.
+- Each `read_*` converts the item the way an assignment would: `read_int()` of `2.9`
+  is `2`, `read_string()` of `7` is `"7"`.
+- `NAME` is an `int` constant: the block's number, counting from 0 in the order the
+  blocks are written (across included files too). So `restore(LEVEL_1 + n)` picks the
+  n-th block after `LEVEL_1`.
+- Reading past the end of a block carries on into the next one. Reading past the last
+  item of the last block is a runtime error ("out of data").
+- `restore()` with no block goes back to the very first item.
+- `data_count(NAME)` is how many items a block holds.
+
 ---
 
 # Command reference
@@ -431,7 +480,14 @@ Optional arguments are shown in `[brackets]`. String positions are 1-based.
 Angles are in **degrees**.
 
 ### Console & program
-`print([text$])` · `write(text$)` · `input$([prompt$])` · `runtime_error(message$)` · `end`
+`print([text$])` · `write(text$)` · `input$([prompt$])` · `runtime_error(message$)` · `assert(condition [, message$])` · `end`
+
+`assert` stops the program with "assertion failed" (plus `message$`, if given)
+when `condition` is 0. `message$` is built every time the line runs, even when
+the assertion passes.
+
+### Data blocks
+`restore([block])` · `read_int()` · `read_float#()` · `read_string$()` · `data_count(block)` (see [Data blocks](#data-blocks))
 
 ### Time & random numbers
 `millisecs()` · `delay(ms)` · `current_date$()` · `current_time$()` ·
@@ -490,6 +546,35 @@ Mouse: `MOUSE_LEFT` (1), `MOUSE_RIGHT` (2), `MOUSE_MIDDLE` (3).
 `channel_playing(ch)` · `sound_volume(snd, volume#)` · `free_sound(snd)` ·
 `play_music(file$ [, loops=-1])` · `stop_music()`
 
+### Network
+One program **hosts** (player 0); up to 7 others **join** (players 1–7). They share
+`NET_SLOTS` (256) numbers and can send each other text messages, over TCP or UDP.
+
+`net_host(port [, mode])` → 1 if it worked · `net_join(address$, port [, mode])` → 1 if started ·
+`net_status()` · `net_error()` · `net_close()` · `net_update()` ·
+`net_id()` (0 host, 1–7 client, -1 none) · `net_is_host()` · `net_peers()` · `net_peer(id)` ·
+`net_set(slot, value#)` · `net_get(slot)` → float ·
+`net_send(text$ [, to])` · `net_messages()` · `net_recv()` → `""` if none · `net_from()`
+
+Constants: `NET_TCP` (the default mode), `NET_UDP`; `net_status()` gives `NET_OFF`, `NET_CONNECTING`,
+`NET_CONNECTED` or `NET_LOST`; `NET_ALL` (-1, `net_send`'s default), `NET_SLOTS` (256), `NET_MAX_PLAYERS` (8).
+
+- The host owns the slots. Anyone may `net_set` one: your copy changes at once, and a client's change goes
+  to the host, which passes it on to everyone. Only changed slots are sent.
+- Messages (1–255 characters) arrive in order, exactly once, on both TCP and UDP. The host relays them.
+- Nothing blocks. The sockets are read and written when `flip()`, `delay()`, `net_update()`, `net_status()`
+  or `net_recv()` run, so a program without a window should call `delay()` in its loop.
+- A connection that is silent for 5 seconds is dropped; joining gives up after 5 seconds. IPv4 only.
+
+```
+if not net_host(4040) then print("can't host: " + net_error()) : end
+repeat
+    net_set(0, net_get(0) + 1)                   ' everyone sees the count go up
+    while net_messages() > 0 : print("player " + net_from() + ": " + net_recv()) : wend
+    delay(16)
+forever
+```
+
 ---
 
 # How it works
@@ -507,8 +592,10 @@ source.gb   ──lexer──▶ tokens ──prescan──▶ symbol tables ─
 | `src/objects.c` | Strings, instances, arrays, lists, mark-and-sweep GC |
 | `src/builtins.c` | Console/string/math/time natives + native registry |
 | `src/gfx.c` | **All** SDL code: window, drawing, text, images, input, sound |
+| `src/net.c` | Networking: TCP and UDP sockets, the shared slots and messages (also linked into GooberEngine) |
 
 Debugging aids: `GOOBER_GC_STRESS=1` runs the garbage collector on every allocation.
+`GOOBER_NET_LOSS=30` drops 30% of the UDP packets the program sends, to test a bad connection.
 
 ## Roadmap ideas
 - Port `src/gfx.c` to SDL3 (nothing else depends on SDL).

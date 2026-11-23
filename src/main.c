@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
     vm_init(&vm, &prog);
     int code = vm_run(&vm);
     fflush(stdout);
+    net_shutdown();
     gfx_shutdown();
     vm_free(&vm);
     return code;

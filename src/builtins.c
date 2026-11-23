@@ -49,6 +49,12 @@ static Value n_runtimeerror(VM *vm, int argc, Value *args) {
     vm_error(vm, "%s", str_chars(ARG_S(0)));
 }
 
+static Value n_assert(VM *vm, int argc, Value *args) {
+    if (ARG_I(0)) RET_VOID;
+    if (argc > 1) vm_error(vm, "assertion failed: %s", str_chars(ARG_S(1)));
+    vm_error(vm, "assertion failed");
+}
+
 /* ---- time ---- */
 
 static Value n_millisecs(VM *vm, int argc, Value *args) {
@@ -64,6 +70,7 @@ static Value n_delay(VM *vm, int argc, Value *args) {
     int ms = ARG_I(0);
     struct timespec ts = {ms / 1000, (long)(ms % 1000) * 1000000L};
     if (ms > 0) nanosleep(&ts, NULL);
+    net_poll();
     gfx_pump_events();
     RET_VOID;
 }
@@ -411,6 +418,36 @@ static Value n_gcmemalloced(VM *vm, int argc, Value *args) {
     return v_int(vm->bytesAllocated > 0x7fffffff ? 0x7fffffff : (int32_t)vm->bytesAllocated);
 }
 
+/* ---- defdata blocks ---- */
+
+static int data_block_arg(VM *vm, const char *fn, int b) {
+    if (b < 0 || b >= vm->prog->ndataBlocks)
+        vm_error(vm, "%s: there is no data block %d (the program has %d)", fn, b, vm->prog->ndataBlocks);
+    return b;
+}
+
+/* restore() goes back to the first item of the first block; restore(NAME) to NAME's first item. */
+static Value n_restore(VM *vm, int argc, Value *args) {
+    vm->dataPos = argc > 0 ? vm->prog->dataStart[data_block_arg(vm, "restore", ARG_I(0))] : 0;
+    RET_VOID;
+}
+
+static Value n_data_count(VM *vm, int argc, Value *args) {
+    (void)argc;
+    int b = data_block_arg(vm, "data_count", ARG_I(0));
+    return v_int(vm->prog->dataStart[b + 1] - vm->prog->dataStart[b]);
+}
+
+/* Reading runs on past the end of a block into the next one, like BASIC's READ. */
+static Value read_data(VM *vm, const char *fn, uint8_t to) {
+    if (vm->dataPos >= vm->prog->ndata)
+        vm_error(vm, "%s: out of data (every defdata item has been read; use restore to read again)", fn);
+    return vm_convert(vm, vm->prog->data[vm->dataPos++], to);
+}
+static Value n_read_int(VM *vm, int argc, Value *args) { (void)argc; (void)args; return read_data(vm, "read_int", K_INT); }
+static Value n_read_float(VM *vm, int argc, Value *args) { (void)argc; (void)args; return read_data(vm, "read_float", K_FLOAT); }
+static Value n_read_string(VM *vm, int argc, Value *args) { (void)argc; (void)args; return read_data(vm, "read_string", K_STRING); }
+
 NativeDef gb_core_natives[] = {
     {"__list_new", 'v', "", n_list_new},
     {"__list_add_first", 'v', "", n_list_add_first},
@@ -427,6 +464,13 @@ NativeDef gb_core_natives[] = {
     {"write", 'v', "s", n_write},
     {"input", 's', "|s", n_input},
     {"runtime_error", 'v', "s", n_runtimeerror},
+    {"assert", 'v', "i|s", n_assert},
+
+    {"restore", 'v', "|i", n_restore},
+    {"read_int", 'i', "", n_read_int},
+    {"read_float", 'f', "", n_read_float},
+    {"read_string", 's', "", n_read_string},
+    {"data_count", 'i', "i", n_data_count},
 
     {"millisecs", 'i', "", n_millisecs},
     {"delay", 'v', "i", n_delay},
@@ -491,25 +535,28 @@ NativeDef gb_core_natives[] = {
     {NULL, 0, NULL, NULL},
 };
 
-/* ---- registry: core natives first, then graphics ---- */
+/* ---- registry: core natives first, then graphics, then networking (net.c) ---- */
 
-static int ncore = -1, ngfx = 0;
+static int ncore = -1, ngfx = 0, nnet = 0;
 
 static void count_natives(void) {
     if (ncore >= 0) return;
     ncore = 0;
     while (gb_core_natives[ncore].name) ncore++;
     while (gb_gfx_natives[ngfx].name) ngfx++;
+    while (gb_net_natives[nnet].name) nnet++;
 }
 
 int native_count(void) {
     count_natives();
-    return ncore + ngfx;
+    return ncore + ngfx + nnet;
 }
 
 const NativeDef *native_get(int idx) {
     count_natives();
-    return idx < ncore ? &gb_core_natives[idx] : &gb_gfx_natives[idx - ncore];
+    if (idx < ncore) return &gb_core_natives[idx];
+    if (idx < ncore + ngfx) return &gb_gfx_natives[idx - ncore];
+    return &gb_net_natives[idx - ncore - ngfx];
 }
 
 static bool name_eq(const char *a, const char *lname) {
@@ -522,5 +569,6 @@ int native_find(const char *lname) {
     count_natives();
     for (int i = 0; i < ncore; i++) if (name_eq(gb_core_natives[i].name, lname)) return i;
     for (int i = 0; i < ngfx; i++) if (name_eq(gb_gfx_natives[i].name, lname)) return ncore + i;
+    for (int i = 0; i < nnet; i++) if (name_eq(gb_net_natives[i].name, lname)) return ncore + ngfx + i;
     return -1;
 }

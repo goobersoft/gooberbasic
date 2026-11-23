@@ -14,7 +14,10 @@
 #include <math.h>
 #include <ctype.h>
 
-typedef struct { char *lname; VType type; int slot; int file; } Var;   /* file: the main program's locals belong to their file (-1: any) */
+/* file: the main program's locals belong to their file (-1: any).
+ * filescope: a local statement of the main program, which that file's functions see too.
+ * pending: one of those the prescan found, not yet declared where the main program has got to. */
+typedef struct { char *lname; VType type; int slot; int file; bool filescope, pending; } Var;
 
 typedef struct {
     char *lname;
@@ -58,7 +61,7 @@ typedef struct FuncState {
     int nups, capUps;
 } FuncState;
 
-typedef struct { int where; int slot; VType type; ConstSym *c; } VarRef; /* where: 0 local, 1 global, 2 const, 3 upvalue */
+typedef struct { int where; int slot; VType type; ConstSym *c; } VarRef; /* where: 0 local, 1 global, 2 const, 3 upvalue, 4 main program's local */
 
 typedef struct {
     int kind;        /* 0 variable, 1 field, 2 array element */
@@ -75,6 +78,7 @@ static struct {
     int pos;
     Program *prog;
     bool strict;
+    bool prescanning;   /* prescan making the main program's local slots */
     int superFrom;     /* token index of the first superstrict (count if none): declarations after it need a type */
     Var *globals; int nglobals, capGlobals;
     ConstSym *consts; int nconsts, capConsts;
@@ -83,6 +87,7 @@ static struct {
     FuncState mainState;
     int32_t lastLine;
     int depth;
+    int dataBlock;     /* the next defdata block the main pass fills */
     /* constant folding (see fold()) */
     int starts[4], nstarts;   /* offsets of the most recent instructions */
     int barrier;              /* highest offset a jump may target: never fold across it */
@@ -1031,23 +1036,27 @@ static void to_bool(VType t) {
 /* symbols                                                             */
 /* ------------------------------------------------------------------ */
 
-/* A local of the main program belongs to the file it's declared in: each
- * included file's top-level locals are its own (use global to share). A
- * function's locals are its own anyway. */
+/* A name is global unless declared with local. A local of the main program
+ * belongs to the file it's declared in: each included file's top-level
+ * locals are its own, and the functions written in that file see them too,
+ * wherever they stand in it. A function's locals are its own anyway. */
 static int local_file(Token *at) { return C.F->isMain && at ? at->file : -1; }
 
-static bool local_visible(const Var *v, int file) { return v->file < 0 || file < 0 || v->file == file; }
+static bool local_visible(const Var *v, int file) { return !v->pending && (v->file < 0 || file < 0 || v->file == file); }
 
 static int declare_local_slot(const char *lname, VType t, Token *at) {
     FuncState *F = C.F;
     int file = local_file(at);
     if (lname) {
-        for (int i = 0; i < F->nlocals; i++)
-            if (F->locals[i].lname && strcmp(F->locals[i].lname, lname) == 0 && local_visible(&F->locals[i], file)) {
-                if (!vt_eq(F->locals[i].type, t))
-                    cerror_at(at, "'%s' was already declared as %s", at->text, type_str(F->locals[i].type));
-                return F->locals[i].slot;
-            }
+        for (int i = 0; i < F->nlocals; i++) {
+            Var *o = &F->locals[i];
+            if (!o->lname || strcmp(o->lname, lname) != 0) continue;
+            if (!local_visible(o, file) && !(o->pending && o->file == file)) continue;
+            if (!vt_eq(o->type, t))
+                cerror_at(at, "'%s' was already declared as %s", at->text, type_str(o->type));
+            if (!C.prescanning) o->pending = false;   /* the prescan's slot, declared here */
+            return o->slot;
+        }
     }
     if (F->nlocals == F->cap) {
         F->cap = F->cap ? F->cap * 2 : 16;
@@ -1056,6 +1065,7 @@ static int declare_local_slot(const char *lname, VType t, Token *at) {
     Var *v = &F->locals[F->nlocals];
     v->lname = lname ? gb_strdup(lname) : NULL;
     v->file = lname ? file : -1;
+    v->filescope = v->pending = false;
     v->type = t;
     v->type.lit = 0;
     v->slot = F->nlocals;
@@ -1068,6 +1078,36 @@ static Var *find_global(const char *lname) {
     for (int i = 0; i < C.nglobals; i++)
         if (strcmp(C.globals[i].lname, lname) == 0) return &C.globals[i];
     return NULL;
+}
+
+static Var *new_global(const char *lname, VType t) {
+    if (C.nglobals == C.capGlobals) {
+        C.capGlobals = C.capGlobals ? C.capGlobals * 2 : 32;
+        C.globals = gb_realloc(C.globals, sizeof(Var) * (size_t)C.capGlobals);
+    }
+    Var *g = &C.globals[C.nglobals];
+    g->lname = gb_strdup(lname);
+    g->file = -1;
+    g->filescope = g->pending = false;
+    g->type = t;
+    g->type.lit = 0;
+    g->slot = C.nglobals++;
+    return g;
+}
+
+/* A name used without local is a global. Globals written with the word
+ * global at the top level were prescanned; any other one is made the first
+ * time the compiler meets it, with the type it's given there. */
+static VarRef global_ref(Token *name, VType t) {
+    Var *g = find_global(name->lower);
+    if (!g) g = new_global(name->lower, t);
+    else if (!vt_eq(g->type, t)) cerror_at(name, "'%s' was already declared as %s", name->text, type_str(g->type));
+    VarRef r;
+    r.where = 1;
+    r.slot = g->slot;
+    r.type = g->type;
+    r.c = NULL;
+    return r;
 }
 
 static ConstSym *find_const(const char *lname) {
@@ -1099,8 +1139,8 @@ static void private_func_check(Token *id) {
     for (int i = 0; i < C.nfuncs; i++) {
         FuncSym *f = &C.funcs[i];
         if (!strcmp(f->lname, id->lower) && !f->shared && f->file != id->file)
-            cerror_at(id, "'%s' is a function of %s, and only that file can call it (write global function %s there to share it)",
-                      id->text, file_name(f->file), f->name);
+            cerror_at(id, "'%s' is a local function of %s, and only that file can call it (remove local there to share it)",
+                      id->text, file_name(f->file));
     }
 }
 
@@ -1132,6 +1172,22 @@ static int resolve_upvalue(FuncState *F, Token *id) {
     return add_upvalue(F, false, u, E->ups[u].type);
 }
 
+/* In a named function (or a function value inside one), `id` as a local
+ * statement of the main program in the same file: the function sees it like
+ * a closure sees the variables around it, but straight in the main program's
+ * frame, which lasts as long as the program. */
+static Var *file_local(Token *id) {
+    FuncState *R = C.F;
+    while (R->enclosing) R = R->enclosing;
+    if (R->isMain) return NULL;   /* function values in the main program capture instead */
+    FuncState *M = &C.mainState;
+    for (int i = 0; i < M->nlocals; i++) {
+        Var *v = &M->locals[i];
+        if (v->filescope && v->file == id->file && !strcmp(v->lname, id->lower)) return v;
+    }
+    return NULL;
+}
+
 static bool lookup_var(Token *id, VarRef *out) {
     const char *lname = id->lower;
     FuncState *F = C.F;
@@ -1143,6 +1199,8 @@ static bool lookup_var(Token *id, VarRef *out) {
         }
     int u = resolve_upvalue(F, id);
     if (u >= 0) { out->where = 3; out->slot = u; out->type = F->ups[u].type; out->c = NULL; return true; }
+    Var *m = file_local(id);
+    if (m) { out->where = 4; out->slot = m->slot; out->type = m->type; out->c = NULL; return true; }
     Var *g = find_global(lname);
     if (g) { out->where = 1; out->slot = g->slot; out->type = g->type; out->c = NULL; return true; }
     ConstSym *c = find_const(lname);
@@ -1208,15 +1266,10 @@ static VarRef auto_var(Token *name) {
         if (renamed_builtin(name->text)) unknown_name(name, "name");
         cerror_at(name, "Identifier '%s' has not been declared (strict mode)", name->text);
     }
-    /* Without strict an unknown name becomes a variable, so "x = MouseX"
+    /* Without strict an unknown name becomes a global variable, so "x = MouseX"
      * would silently read 0. Catch old CamelCase built-in names. */
     if (looks_camel(name->text) && renamed_builtin(name->text)) unknown_name(name, "name");
-    VarRef r;
-    r.where = 0;
-    r.type = name->suffix ? suffix_type(name->suffix) : vt(K_INT);
-    r.slot = declare_local_slot(name->lower, r.type, name);
-    r.c = NULL;
-    return r;
+    return global_ref(name, name->suffix ? suffix_type(name->suffix) : vt(K_INT));
 }
 
 static void add_const_sym(Token *name, ConstVal v) {
@@ -1258,6 +1311,7 @@ static void add_builtin_const(const char *name, VType t, int32_t i, double f) {
 static void emit_load_var(VarRef *r) {
     if (r->where == 0) emit_op1(OP_LOAD_LOCAL, r->slot);
     else if (r->where == 3) emit_op1(OP_GET_UPVAL, r->slot);
+    else if (r->where == 4) emit_op1(OP_LOAD_MAIN, r->slot);
     else if (r->where == 1) emit_op1(OP_LOAD_GLOBAL, r->slot);
     else {
         ConstSym *c = r->c;
@@ -1271,6 +1325,7 @@ static void emit_load_var(VarRef *r) {
 static void emit_store_var(VarRef *r) {
     if (r->where == 0) emit_op1(OP_STORE_LOCAL, r->slot);
     else if (r->where == 3) emit_op1(OP_SET_UPVAL, r->slot);
+    else if (r->where == 4) emit_op1(OP_STORE_MAIN, r->slot);
     else if (r->where == 1) emit_op1(OP_STORE_GLOBAL, r->slot);
     else cerror("Cannot assign to a constant");
 }
@@ -2298,12 +2353,8 @@ static void pop_loop(int contTarget, int breakTarget) {
 
 static void declare_target(Token *name, VType t, bool global, VarRef *out) {
     if (global) {
-        Var *g = find_global(name->lower);
-        if (!g) cerror_at(name, "internal: global '%s' was not prescanned", name->text);
-        if (!vt_eq(g->type, t)) cerror_at(name, "global '%s' was declared as %s", name->text, type_str(g->type));
-        out->where = 1;
-        out->slot = g->slot;
-        out->type = g->type;
+        *out = global_ref(name, t);   /* prescanned at the top level; inside a function, made here */
+        return;
     } else {
         out->where = 0;
         out->slot = declare_local_slot(name->lower, t, name);
@@ -2461,7 +2512,7 @@ static void ident_statement(void) {
     VarRef ref;
     bool isVar = lookup_var(id, &ref);
     advance();
-    /* `name:Type = value` declares a local on the spot (like Blitz's p.Player = New Player) */
+    /* `name:Type = value` declares a global on the spot (local name:Type for a local) */
     if (at_annot(false)) {
         VType t = parse_annot(id, NULL);
         if (pt() == T_LBRACK) {
@@ -2472,11 +2523,8 @@ static void ident_statement(void) {
         if (isVar) {
             if (!vt_eq(ref.type, t)) cerror_at(id, "'%s' was already declared as %s", id->text, type_str(ref.type));
         } else {
-            if (C.strict) cerror_at(id, "Use local to declare '%s' (strict mode)", id->text);
-            ref.where = 0;
-            ref.slot = declare_local_slot(id->lower, t, id);
-            ref.type = t;
-            ref.c = NULL;
+            if (C.strict) cerror_at(id, "Use local or global to declare '%s' (strict mode)", id->text);
+            ref = global_ref(id, t);
         }
         if (pt() != T_EQ) cerror("Expected '=' after the declaration of '%s'", id->text);
         assignment(id, ref);
@@ -2599,11 +2647,7 @@ static VarRef for_var(Token *name, bool isLocal, bool explicitT, VType t) {
         return r;
     }
     if (C.strict) cerror_at(name, "Loop variable '%s' has not been declared (use for local ...)", name->text);
-    r.where = 0;
-    r.slot = declare_local_slot(name->lower, t, name);
-    r.type = t;
-    r.c = NULL;
-    return r;
+    return global_ref(name, t);   /* no local: the counter is a global */
 }
 
 static void for_statement(Token *forTok) {
@@ -2823,19 +2867,61 @@ static void return_statement(void) {
     emit_op(OP_RET);
 }
 
+/* defdata NAME ... enddata: constant values, separated by commas or line
+ * ends, appended to the program's data pool. NAME was made an int constant
+ * (the block's number) by prescan, so it can be used before this line. */
+static void push_data(Value v) {
+    Program *p = C.prog;
+    if (p->ndata == p->capData) {
+        p->capData = p->capData ? p->capData * 2 : 64;
+        p->data = gb_realloc(p->data, sizeof(Value) * (size_t)p->capData);
+    }
+    p->data[p->ndata++] = v;
+}
+
+static void defdata_statement(Token *dt) {
+    if (!C.F->isMain || C.depth > 0) cerror_at(dt, "defdata must be at the top level, not inside a function or block");
+    expect(T_IDENT, "a name for the data block");
+    C.prog->dataStart[C.dataBlock++] = C.prog->ndata;
+    for (;;) {
+        while (pt() == T_NEWLINE || pt() == T_COLON) advance();
+        if (pt() == T_ENDDATA) break;
+        if (pt() == T_EOF) cerror_at(dt, "defdata on line %d is never closed (expected enddata)", dt->line);
+        Token *at = peek();
+        ConstVal v = cx_add();
+        switch (v.t.base) {
+            case K_INT: push_data(v_int(v.i)); break;
+            case K_LONG: case K_ULONG: push_data(v_long(v.l)); break;
+            case K_FLOAT: push_data(v_float(v.f)); break;
+            case K_STRING: push_data(v_str(perm_str(v.s, v.slen))); break;
+            default: cerror_at(at, "defdata items must be numbers or strings");
+        }
+        if (match(T_COMMA)) {
+            if (pt() == T_ENDDATA) cerror("Expected a value after ',' (enddata follows)");
+            continue;
+        }
+        if (pt() != T_NEWLINE && pt() != T_COLON && pt() != T_ENDDATA)
+            cerror("Expected ',' or the end of the line between defdata items, but found %s", tok_desc(peek()));
+    }
+    advance(); /* enddata */
+}
+
 static void statement(void) {
     Token *t = peek();
     switch (t->type) {
         case T_STRICT: advance(); C.strict = true; return;
         case T_SUPERSTRICT: advance(); C.strict = true; return;   /* the type rules key off superFrom */
-        case T_LOCAL: advance(); decl_statement(false, false); return;
-        case T_GLOBAL:
+        case T_LOCAL:
             advance();
-            if (pt() == T_FUNCTION) { Token *ft = peek(); advance(); function_statement(ft); return; }   /* global function */
-            if (!C.F->isMain) cerror_at(t, "global can only be declared outside functions");
+            if (pt() == T_FUNCTION) { Token *ft = peek(); advance(); function_statement(ft); return; }   /* local function */
+            decl_statement(false, false);
+            return;
+        case T_GLOBAL:   /* optional: a name without local is global anyway */
+            advance();
+            if (pt() == T_FUNCTION) { Token *ft = peek(); advance(); function_statement(ft); return; }
             decl_statement(true, false);
             return;
-        case T_DIM: advance(); decl_statement(C.F->isMain, true); return;
+        case T_DIM: advance(); decl_statement(true, true); return;   /* dim makes a global; local x[n] a local */
         case T_CONST: advance(); const_statement(); return;
         case T_IF: advance(); if_statement(t); return;
         case T_WHILE: advance(); while_statement(t); return;
@@ -2865,7 +2951,9 @@ static void statement(void) {
             advance();
             return;
         }
+        case T_DEFDATA: advance(); defdata_statement(t); return;
         case T_IDENT: ident_statement(); return;
+        case T_ENDDATA: cerror("enddata without defdata");
         case T_ENDFUNCTION: cerror("endfunction without function");
         case T_ENDIF: cerror("endif without if");
         case T_WEND: cerror("wend without while");
@@ -2886,14 +2974,7 @@ static void statement(void) {
 
 static void add_global(Token *name, VType t) {
     if (find_global(name->lower)) cerror_at(name, "global '%s' is declared twice", name->text);
-    if (C.nglobals == C.capGlobals) {
-        C.capGlobals = C.capGlobals ? C.capGlobals * 2 : 32;
-        C.globals = gb_realloc(C.globals, sizeof(Var) * (size_t)C.capGlobals);
-    }
-    Var *g = &C.globals[C.nglobals];
-    g->lname = gb_strdup(name->lower);
-    g->type = t;
-    g->slot = C.nglobals++;
+    new_global(name->lower, t);
 }
 
 static void skip_initializer(void) {
@@ -2928,6 +3009,22 @@ static void prescan_globals_decl(void) {
         VType t = parse_annot(name, NULL);
         if (pt() == T_LBRACK) t.dims = (uint8_t)count_dims_skip();
         add_global(name, t);
+        if (match(T_EQ)) skip_initializer();
+    } while (match(T_COMMA));
+}
+
+/* a local statement of the main program: its slot is made now, so the
+ * file's functions see it wherever they are; the main program itself sees
+ * it from its line on */
+static void prescan_locals_decl(void) {
+    FuncState *M = &C.mainState;
+    do {
+        Token *name = expect(T_IDENT, "a variable name");
+        VType t = parse_annot(name, NULL);
+        if (pt() == T_LBRACK) t.dims = (uint8_t)count_dims_skip();
+        int n = M->nlocals;
+        int slot = declare_local_slot(name->lower, t, name);
+        if (M->nlocals > n) { M->locals[slot].filescope = true; M->locals[slot].pending = true; }
         if (match(T_EQ)) skip_initializer();
     } while (match(T_COMMA));
 }
@@ -2989,8 +3086,8 @@ static void parse_signature(Token *name, bool isValue, Sig *out) {
     out->pdef = pdef;
 }
 
-/* a function's signature. A plain function belongs to its file; global function
- * is shared by every file, so its name may be used only once. */
+/* a function's signature. A plain function is shared by every file, so its
+ * name may be used only once; local function belongs to its own file. */
 static void prescan_function(bool shared) {
     Token *name = expect(T_IDENT, "a function name");
     for (int i = 0; i < C.nfuncs; i++) {
@@ -2998,7 +3095,8 @@ static void prescan_function(bool shared) {
         if (strcmp(o->lname, name->lower) != 0) continue;
         if (o->file == name->file) cerror_at(name, "function '%s' is defined twice", name->text);
         if (o->shared || shared)
-            cerror_at(name, "function '%s' is also defined in %s; a global function's name can be used only once", name->text, file_name(o->file));
+            cerror_at(name, "function '%s' is also defined in %s; write local function in each file to keep them apart",
+                      name->text, file_name(o->file));
     }
     Sig sg;
     parse_signature(name, false, &sg);
@@ -3091,7 +3189,7 @@ static void prescan(void) {
         if (tl->toks[i].type != T_FUNCTION) continue;
         if (tl->toks[i + 1].type != T_IDENT) continue;   /* function:int(...) ... is a function value */
         C.pos = i + 1;
-        prescan_function(i > 0 && tl->toks[i - 1].type == T_GLOBAL);
+        prescan_function(!(i > 0 && tl->toks[i - 1].type == T_LOCAL));
     }
     /* pass 4: top-level globals */
     int inFunc = 0;   /* depth: function values nest */
@@ -3102,7 +3200,27 @@ static void prescan(void) {
         else if (!inFunc && (t == T_GLOBAL || t == T_DIM) && tl->toks[i + 1].type != T_FUNCTION) {
             C.pos = i + 1;
             prescan_globals_decl();
+        } else if (!inFunc && t == T_LOCAL && tl->toks[i + 1].type == T_IDENT && !(i > 0 && tl->toks[i - 1].type == T_FOR)) {
+            C.pos = i + 1;
+            C.prescanning = true;
+            prescan_locals_decl();
+            C.prescanning = false;
         }
+    }
+    /* pass 5: defdata block names become int constants (the block's number) */
+    for (int i = 0; i < tl->count; i++)
+        if (tl->toks[i].type == T_DEFDATA) p->ndataBlocks++;
+    p->dataStart = gb_alloc(sizeof(int) * (size_t)(p->ndataBlocks + 1));
+    int block = 0;
+    for (int i = 0; i < tl->count; i++) {
+        if (tl->toks[i].type != T_DEFDATA) continue;
+        Token *nm = &tl->toks[i + 1];
+        if (nm->type != T_IDENT) cerror_at(nm, "Expected a name after defdata, e.g. defdata LEVEL_1");
+        if (find_global(nm->lower)) cerror_at(nm, "'%s' is already a global", nm->text);
+        if (find_const(nm->lower)) cerror_at(nm, "'%s' is already defined (data block names are constants)", nm->text);
+        ConstVal v = cnum_i(block++);
+        v.t.lit = 1;
+        add_const_sym(nm, v);
     }
     C.pos = 0;
 }
@@ -3122,6 +3240,8 @@ void compile_program(TokenList *tl, Program *prog) {
     add_builtin_const("pi", vt(K_FLOAT), 0, 3.14159265358979323846);
     for (int i = 0; gb_gfx_consts[i].name; i++)
         add_builtin_const(gb_gfx_consts[i].name, vt(K_INT), gb_gfx_consts[i].value, 0);
+    for (int i = 0; gb_net_consts[i].name; i++)
+        add_builtin_const(gb_net_consts[i].name, vt(K_INT), gb_net_consts[i].value, 0);
 
     /* function 0 is the main program */
     prog->capFuncs = 32;
@@ -3143,6 +3263,7 @@ void compile_program(TokenList *tl, Program *prog) {
         end_of_statement();
     }
     emit_op(OP_END);
+    prog->dataStart[prog->ndataBlocks] = prog->ndata;
 
     FuncDef *mainFd = &prog->funcs[0];
     mainFd->nlocals = C.mainState.nlocals;

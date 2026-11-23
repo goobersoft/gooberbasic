@@ -1,0 +1,32 @@
+' A local at the top level belongs to its file, and the functions written in
+' that file see it, like a closure sees the variables around it.
+include "filelocals/lib.gb"
+function early:int()          ' written above the local: still sees it
+    return score
+endfunction
+local score:int = 10
+local name:string = "goober", grid:int[3]
+function add_score(n:int)
+    score = score + n         ' writes main's local, not a new global
+    grid[1] = score
+endfunction
+function shadow:int()
+    local score:int = 99      ' a function's own local hides the file's
+    return score
+endfunction
+function make_adder:int(int)()
+    return function:int(x:int)    ' a function value inside a function sees it too
+        return x + score
+    endfunction
+endfunction
+add_score(5)
+print(score)
+print(early())
+print(grid[1])
+print(shadow())
+print(score)
+local f:int(int) = make_adder()
+print(f(100))
+print(lib_count())
+print(name)
+print(lib_name())

@@ -1,0 +1,2 @@
+passed
+tests/assert.gb:6: runtime error: assertion failed: hp went negative: -3

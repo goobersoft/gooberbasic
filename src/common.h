@@ -234,6 +234,14 @@ typedef struct {
 
     char **files;
     int nfiles;
+
+    /* defdata blocks: every item of every block, in source order, and where
+     * each block starts (block b holds data[dataStart[b] .. dataStart[b+1]-1];
+     * dataStart has ndataBlocks + 1 entries, the last being ndata). */
+    Value *data;
+    int ndata, capData;
+    int *dataStart;
+    int ndataBlocks;
 } Program;
 
 /* ---- Opcodes ---- */
@@ -279,6 +287,7 @@ typedef enum {
     OP_CALL_VALUE,    /* argc: calls the function value below the arguments */
     OP_CLOSURE,       /* func, nup, then nup x (isLocal, index) */
     OP_GET_UPVAL, OP_SET_UPVAL, /* upvalue index */
+    OP_LOAD_MAIN, OP_STORE_MAIN, /* a main program's local, from a function: slot */
     OP_NATIVE,        /* native, argc */
     OP_RET,
 
@@ -309,6 +318,12 @@ char *gb_lower(const char *s);
  * can report the error and carry on. */
 extern void (*gb_diag_hook)(const char *text);
 extern jmp_buf *gb_error_jmp;
+/* If gb_poll_hook is set, the VM calls it now and then on loop back-edges
+ * (every GB_POLL_EVERY backward jumps), so a host can notice a stop request
+ * (Esc, window close) even in a loop that never calls a builtin. It may
+ * vm_exit(). */
+#define GB_POLL_EVERY 1024
+extern void (*gb_poll_hook)(void);
 void gb_diag(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void gb_vdiag(const char *fmt, va_list ap);
 void gb_fatal(void) __attribute__((noreturn));

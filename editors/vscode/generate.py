@@ -28,12 +28,15 @@ def read(name):
 
 
 lexer, builtins, gfx, compiler = read("lexer.c"), read("builtins.c"), read("gfx.c"), read("compiler.c")
+net = read("net.c")
 
 # ---- names from the sources ----
-keywords = set(re.findall(r'\{"([a-z]+)", T_[A-Z]+\}', lexer))
+# only the keywords[] table: the "end data" / "end if" merge table holds words that aren't keywords alone
+kwtable = re.search(r'keywords\[\] = \{(.*?)\{NULL', lexer, re.S).group(1)
+keywords = set(re.findall(r'\{"([a-z]+)", T_[A-Z]+\}', kwtable))
 
 natives = set()
-for src in (builtins, gfx):
+for src in (builtins, gfx, net):
     natives |= set(n for n in re.findall(r'^\s*\{"([a-z0-9_]+)", \'[a-z]\'', src, re.M) if not n.startswith("__"))
 
 m = re.search(r'LIST_FNS\[\] = \{(.*?)NULL', compiler, re.S)
@@ -44,6 +47,7 @@ intrinsics = {"len", "str", "string", "abs", "sgn", "min", "max"}
 
 consts = ["KEY_" + k for k in re.findall(r'K\(([A-Z0-9]+), [A-Z0-9_]+\)', gfx)]
 consts += re.findall(r'\{"(MOUSE_[A-Z]+)", \d+\}', gfx)
+consts += re.findall(r'\{"(NET_[A-Z_]+)", ', net)
 
 # --with FILE.c: more native tables ({"name", 'r', ...}) and constants ({"NAME", ...}, K(...))
 args = sys.argv[1:]
@@ -68,7 +72,7 @@ control = {"if", "then", "else", "elseif", "endif", "while", "wend", "endwhile",
            "forever", "for", "to", "step", "next", "eachin", "select", "case", "default",
            "endselect", "exit", "continue", "return", "end"}
 declare = {"function", "endfunction", "type", "endtype", "field", "local", "global", "const",
-           "dim", "strict", "superstrict", "include", "new"}
+           "dim", "strict", "superstrict", "include", "new", "defdata", "enddata"}
 wordops = {"and", "or", "not", "mod", "shl", "shr", "sar"}
 literals = {"true", "false", "pi", "null"}   # true/false/pi are built-in constants, null a keyword
 

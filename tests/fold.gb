@@ -2,7 +2,7 @@
 ' Each check prints the folded value (literals) and the run-time value
 ' (the same numbers through variables), which must match.
 function check(name$, folded$, runtime$)
-    mark$ = "ok"
+    local mark$ = "ok"
     if folded$ <> runtime$ then mark$ = "MISMATCH"
     print(name$ + ": " + folded$ + " / " + runtime$ + " " + mark$)
 endfunction

@@ -6,7 +6,7 @@ SDL_CFLAGS := $(shell pkg-config --cflags sdl2 SDL2_image SDL2_ttf SDL2_mixer)
 SDL_LIBS   := $(shell pkg-config --libs sdl2 SDL2_image SDL2_ttf SDL2_mixer)
 LDLIBS  += $(SDL_LIBS) -lm
 
-SRC := src/main.c src/lexer.c src/compiler.c src/vm.c src/objects.c src/builtins.c src/gfx.c
+SRC := src/main.c src/lexer.c src/compiler.c src/vm.c src/objects.c src/builtins.c src/net.c src/gfx.c
 OBJ := $(SRC:src/%.c=build/%.o)
 
 all: goober

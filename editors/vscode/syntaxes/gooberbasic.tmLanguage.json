@@ -176,7 +176,7 @@
         },
         {
           "name": "storage.modifier.gooberbasic",
-          "match": "(?i)\\b(?:endfunction|superstrict|function|endtype|include|global|strict|const|field|local|type|dim|new)\\b"
+          "match": "(?i)\\b(?:endfunction|superstrict|function|defdata|enddata|endtype|include|global|strict|const|field|local|type|dim|new)\\b"
         },
         {
           "name": "keyword.operator.word.gooberbasic",
@@ -216,7 +216,7 @@
         },
         {
           "name": "support.function.builtin.gooberbasic",
-          "match": "(?i)\\b(?:set_image_handle|channel_playing|draw_image_rect|graphics_height|save_screenshot|gc_mem_alloced|graphics_width|list_add_first|app_terminate|draw_image_ex|list_add_last|list_contains|list_is_empty|rects_overlap|repeat_string|runtime_error|set_cls_color|current_date|current_time|end_graphics|image_height|sound_volume|stop_channel|draw_circle|image_width|list_remove|text_height|clear_list|count_list|draw_image|flush_keys|free_image|free_sound|gc_collect|hide_mouse|load_image|load_sound|mid_handle|mouse_down|move_mouse|play_music|play_sound|show_mouse|stop_music|text_width|app_title|draw_line|draw_oval|draw_rect|draw_text|load_font|millisecs|mouse_hit|set_alpha|set_color|distance|graphics|key_down|seed_rnd|set_font|wait_key|key_hit|mouse_x|mouse_y|mouse_z|replace|atan2|delay|floor|input|instr|log10|lower|print|right|round|upper|write|acos|asin|atan|ceil|flip|left|lset|plot|rand|rset|sqrt|trim|asc|bin|chr|cls|cos|exp|hex|log|mid|rnd|sin|sqr|tan)\\b(?![%#$])"
+          "match": "(?i)\\b(?:set_image_handle|channel_playing|draw_image_rect|graphics_height|save_screenshot|gc_mem_alloced|graphics_width|list_add_first|app_terminate|draw_image_ex|list_add_last|list_contains|list_is_empty|rects_overlap|repeat_string|runtime_error|set_cls_color|current_date|current_time|end_graphics|image_height|net_messages|sound_volume|stop_channel|draw_circle|image_width|list_remove|net_is_host|read_string|text_height|clear_list|count_list|data_count|draw_image|flush_keys|free_image|free_sound|gc_collect|hide_mouse|load_image|load_sound|mid_handle|mouse_down|move_mouse|net_status|net_update|play_music|play_sound|read_float|show_mouse|stop_music|text_width|app_title|draw_line|draw_oval|draw_rect|draw_text|load_font|millisecs|mouse_hit|net_close|net_error|net_peers|set_alpha|set_color|distance|graphics|key_down|net_from|net_host|net_join|net_peer|net_recv|net_send|read_int|seed_rnd|set_font|wait_key|key_hit|mouse_x|mouse_y|mouse_z|net_get|net_set|replace|restore|assert|net_id|atan2|delay|floor|input|instr|log10|lower|print|right|round|upper|write|acos|asin|atan|ceil|flip|left|lset|plot|rand|rset|sqrt|trim|asc|bin|chr|cls|cos|exp|hex|log|mid|rnd|sin|sqr|tan)\\b(?![%#$])"
         },
         {
           "name": "storage.type.gooberbasic",
@@ -228,7 +228,7 @@
       "patterns": [
         {
           "name": "support.constant.gooberbasic",
-          "match": "(?i)\\b(?:KEY_BACKSPACE|KEY_LCONTROL|KEY_PAGEDOWN|KEY_RCONTROL|MOUSE_MIDDLE|MOUSE_RIGHT|KEY_DELETE|KEY_EQUALS|KEY_ESCAPE|KEY_INSERT|KEY_LSHIFT|KEY_PAGEUP|KEY_PERIOD|KEY_RSHIFT|MOUSE_LEFT|KEY_COMMA|KEY_ENTER|KEY_MINUS|KEY_RIGHT|KEY_SLASH|KEY_SPACE|KEY_DOWN|KEY_HOME|KEY_LALT|KEY_LEFT|KEY_RALT|KEY_END|KEY_F10|KEY_F11|KEY_F12|KEY_TAB|KEY_F1|KEY_F2|KEY_F3|KEY_F4|KEY_F5|KEY_F6|KEY_F7|KEY_F8|KEY_F9|KEY_UP|KEY_0|KEY_1|KEY_2|KEY_3|KEY_4|KEY_5|KEY_6|KEY_7|KEY_8|KEY_9|KEY_A|KEY_B|KEY_C|KEY_D|KEY_E|KEY_F|KEY_G|KEY_H|KEY_I|KEY_J|KEY_K|KEY_L|KEY_M|KEY_N|KEY_O|KEY_P|KEY_Q|KEY_R|KEY_S|KEY_T|KEY_U|KEY_V|KEY_W|KEY_X|KEY_Y|KEY_Z)\\b"
+          "match": "(?i)\\b(?:NET_MAX_PLAYERS|NET_CONNECTING|KEY_BACKSPACE|NET_CONNECTED|KEY_LCONTROL|KEY_PAGEDOWN|KEY_RCONTROL|MOUSE_MIDDLE|MOUSE_RIGHT|KEY_DELETE|KEY_EQUALS|KEY_ESCAPE|KEY_INSERT|KEY_LSHIFT|KEY_PAGEUP|KEY_PERIOD|KEY_RSHIFT|MOUSE_LEFT|KEY_COMMA|KEY_ENTER|KEY_MINUS|KEY_RIGHT|KEY_SLASH|KEY_SPACE|NET_SLOTS|KEY_DOWN|KEY_HOME|KEY_LALT|KEY_LEFT|KEY_RALT|NET_LOST|KEY_END|KEY_F10|KEY_F11|KEY_F12|KEY_TAB|NET_ALL|NET_OFF|NET_TCP|NET_UDP|KEY_F1|KEY_F2|KEY_F3|KEY_F4|KEY_F5|KEY_F6|KEY_F7|KEY_F8|KEY_F9|KEY_UP|KEY_0|KEY_1|KEY_2|KEY_3|KEY_4|KEY_5|KEY_6|KEY_7|KEY_8|KEY_9|KEY_A|KEY_B|KEY_C|KEY_D|KEY_E|KEY_F|KEY_G|KEY_H|KEY_I|KEY_J|KEY_K|KEY_L|KEY_M|KEY_N|KEY_O|KEY_P|KEY_Q|KEY_R|KEY_S|KEY_T|KEY_U|KEY_V|KEY_W|KEY_X|KEY_Y|KEY_Z)\\b"
         },
         {
           "name": "constant.other.gooberbasic",

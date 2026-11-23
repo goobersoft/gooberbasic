@@ -31,7 +31,7 @@ static struct { const char *word; TokType type; } keywords[] = {
     {"const", T_CONST}, {"dim", T_DIM}, {"strict", T_STRICT}, {"superstrict", T_SUPERSTRICT}, {"end", T_END},
     {"exit", T_EXIT}, {"continue", T_CONTINUE}, {"and", T_AND}, {"or", T_OR},
     {"not", T_NOT}, {"mod", T_MOD}, {"shl", T_SHL}, {"shr", T_SHR}, {"sar", T_SAR},
-    {"include", T_INCLUDE},
+    {"include", T_INCLUDE}, {"defdata", T_DEFDATA}, {"enddata", T_ENDDATA},
     {NULL, T_EOF}
 };
 
@@ -56,7 +56,7 @@ static const char *tok_names[T__COUNT] = {
     [T_CONST] = "const", [T_DIM] = "dim", [T_STRICT] = "strict", [T_SUPERSTRICT] = "superstrict", [T_END] = "end",
     [T_EXIT] = "exit", [T_CONTINUE] = "continue", [T_AND] = "and", [T_OR] = "or",
     [T_NOT] = "not", [T_MOD] = "mod", [T_SHL] = "shl", [T_SHR] = "shr", [T_SAR] = "sar",
-    [T_INCLUDE] = "include",
+    [T_INCLUDE] = "include", [T_DEFDATA] = "defdata", [T_ENDDATA] = "enddata",
 };
 
 const char *tok_name(TokType t) {
@@ -243,7 +243,7 @@ static void lex_ident(Lexer *L) {
                 while (*q == ' ' || *q == '\t') q++;
                 static const struct { const char *w; TokType t; } ends[] = {
                     {"if", T_ENDIF}, {"function", T_ENDFUNCTION}, {"type", T_ENDTYPE},
-                    {"select", T_ENDSELECT}, {"while", T_WEND}, {NULL, T_EOF}};
+                    {"select", T_ENDSELECT}, {"while", T_WEND}, {"data", T_ENDDATA}, {NULL, T_EOF}};
                 if (type == T_END) {
                     for (int k = 0; ends[k].w; k++)
                         if (word_at(q, ends[k].w)) {

@@ -1,0 +1,3 @@
+' expect: 'A' is already defined (data block names are constants)
+defdata A : 1 : enddata
+defdata A : 2 : enddata

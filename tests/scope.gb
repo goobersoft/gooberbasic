@@ -1,9 +1,10 @@
-' include: each file has its own top-level locals and functions;
-' global variables and global functions are shared by every file
+' A name without local is global: variables, loop counters, dim arrays and
+' functions are shared by every file. local keeps one to its function, or
+' at the top level to its file.
 strict
 include "scope/lib.gb"
 local count:int = 1          ' main's own: lib.gb's count is a string of its own
-function helper:string()     ' lib.gb has a helper too: each file calls its own
+local function helper:string()   ' lib.gb has a local helper too: each file calls its own
     return "main's helper"
 endfunction
 print(helper())

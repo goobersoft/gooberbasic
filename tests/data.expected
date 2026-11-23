@@ -1,0 +1,17 @@
+slime 3 0.5
+level 3x2
+101
+010
+level 2 starts 9, 3 items
+counts: 8 0
+2
+1.5
+-7
+6
+5000000000
+|
+after enemies: bat
+first item: slime
+bat
+42
+tests/data.gb:50: runtime error: read_int: out of data (every defdata item has been read; use restore to read again)
