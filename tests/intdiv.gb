@@ -8,3 +8,16 @@ x = f# \ 3
 print(x + 1)
 print(6 \ 4 * 3)
 print("a\b")
+' dividing by zero is the infinity, clamped to the type's range (0 / 0 is 0)
+z = 0
+local zl:sint64 = 0 : local fl:sint64 = 5 : local zu:uint64 = 0 : local fu:uint64 = 5
+print((5 / z) + " " + (-5 / z) + " " + (0 / z))
+print((5 \ z) + " " + (-5 \ z) + " " + (5.5 \ z) + " " + (-5.5 \ z) + " " + (0.0 \ z))
+print((fl / zl) + " " + (-fl / zl) + " " + ((fl - fl) / zl))
+print((fu / zu) + " " + ((fu - fu) / zu))
+const C1 = 7 / 0
+const C2 = -7 \ 0
+const C3 = 7.0 \ 0
+print(C1 + " " + C2 + " " + C3)
+print(7 / 0)
+n = 9 : n :/ z : print(n)

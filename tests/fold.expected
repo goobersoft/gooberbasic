@@ -27,4 +27,4 @@ concat2: a3 / a3 ok
 empty: n / n ok
 and: 4 / 4 ok
 or: 2 / 2 ok
-tests/fold.gb:48: runtime error: Integer division by zero
+tests/fold.gb:48: runtime error: Integer division by zero (Mod)

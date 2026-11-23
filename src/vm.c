@@ -338,8 +338,8 @@ int vm_run(VM *vm) {
             case OP_MULI: sp--; TOP.as.i = (int32_t)((uint32_t)TOP.as.i * (uint32_t)sp->as.i); break;
             case OP_DIVI:
                 sp--;
-                if (sp->as.i == 0) ERR("Integer division by zero");
-                if (sp->as.i == -1) TOP.as.i = (int32_t)(0u - (uint32_t)TOP.as.i);
+                if (sp->as.i == 0) TOP.as.i = TOP.as.i > 0 ? INT32_MAX : TOP.as.i < 0 ? INT32_MIN : 0;   /* x / 0: the infinity, clamped */
+                else if (sp->as.i == -1) TOP.as.i = (int32_t)(0u - (uint32_t)TOP.as.i);
                 else TOP.as.i /= sp->as.i;
                 break;
             case OP_MODI:
@@ -400,8 +400,8 @@ int vm_run(VM *vm) {
             case OP_MULL: sp--; TOP.as.i64 = (int64_t)((uint64_t)TOP.as.i64 * (uint64_t)sp->as.i64); break;
             case OP_DIVL:
                 sp--;
-                if (sp->as.i64 == 0) ERR("Integer division by zero");
-                if (sp->as.i64 == -1) TOP.as.i64 = (int64_t)(0u - (uint64_t)TOP.as.i64);
+                if (sp->as.i64 == 0) TOP.as.i64 = TOP.as.i64 > 0 ? INT64_MAX : TOP.as.i64 < 0 ? INT64_MIN : 0;
+                else if (sp->as.i64 == -1) TOP.as.i64 = (int64_t)(0u - (uint64_t)TOP.as.i64);
                 else TOP.as.i64 /= sp->as.i64;
                 break;
             case OP_MODL:
@@ -413,8 +413,8 @@ int vm_run(VM *vm) {
             case OP_NEGL: TOP.as.i64 = (int64_t)(0u - (uint64_t)TOP.as.i64); break;
             case OP_DIVU:
                 sp--;
-                if (sp->as.i64 == 0) ERR("Integer division by zero");
-                TOP.as.i64 = (int64_t)((uint64_t)TOP.as.i64 / (uint64_t)sp->as.i64);
+                if (sp->as.i64 == 0) TOP.as.i64 = TOP.as.i64 ? (int64_t)UINT64_MAX : 0;
+                else TOP.as.i64 = (int64_t)((uint64_t)TOP.as.i64 / (uint64_t)sp->as.i64);
                 break;
             case OP_MODU:
                 sp--;

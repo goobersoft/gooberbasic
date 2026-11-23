@@ -245,9 +245,9 @@ static void emit_string(const char *s, int len) {
  * just before it are constant pushes, they are removed and the result is
  * pushed instead, so `W / 2 - 10` compiles to a single PUSH_INT. Every
  * rule computes exactly what the VM would (32-bit wrapping ints, masked
- * shift counts, the same number-to-string formatting). Anything that would
- * fail at run time (integer division by zero) is left alone so the error
- * still happens, with its line number. */
+ * shift counts, division by zero clamped, the same number-to-string
+ * formatting). Anything that would fail at run time (mod by zero) is left
+ * alone so the error still happens, with its line number. */
 
 typedef struct { bool ok; uint8_t kind; int32_t i; int64_t l; double f; const char *s; int slen; } KVal;
 
@@ -399,9 +399,9 @@ static int fold_long(OpCode op) {
         case OP_ADDL: r = klong((int64_t)(ua + ub)); break;
         case OP_SUBL: r = klong((int64_t)(ua - ub)); break;
         case OP_MULL: r = klong((int64_t)(ua * ub)); break;
-        case OP_DIVL: if (b == 0) return 0; r = klong(b == -1 ? (int64_t)(0u - ua) : a / b); break;
+        case OP_DIVL: r = klong(b == 0 ? (a > 0 ? INT64_MAX : a < 0 ? INT64_MIN : 0) : b == -1 ? (int64_t)(0u - ua) : a / b); break;
         case OP_MODL: if (b == 0) return 0; r = klong(b == -1 ? 0 : a % b); break;
-        case OP_DIVU: if (b == 0) return 0; r = klong((int64_t)(ua / ub)); break;
+        case OP_DIVU: r = klong(b == 0 ? (ua ? (int64_t)UINT64_MAX : 0) : (int64_t)(ua / ub)); break;
         case OP_MODU: if (b == 0) return 0; r = klong((int64_t)(ua % ub)); break;
         case OP_EQL: r = kint(a == b); break;
         case OP_NEL: r = kint(a != b); break;
@@ -499,8 +499,8 @@ static bool fold(OpCode op) {
             case OP_ADDI: r = kint((int32_t)(ua + ub)); break;
             case OP_SUBI: r = kint((int32_t)(ua - ub)); break;
             case OP_MULI: r = kint((int32_t)(ua * ub)); break;
-            case OP_DIVI: if (b.i == 0) return false;
-                          r = kint(b.i == -1 ? (int32_t)(0u - ua) : a.i / b.i); break;
+            case OP_DIVI: r = kint(b.i == 0 ? (a.i > 0 ? INT32_MAX : a.i < 0 ? INT32_MIN : 0)
+                                   : b.i == -1 ? (int32_t)(0u - ua) : a.i / b.i); break;
             case OP_MODI: if (b.i == 0) return false;
                           r = kint(b.i == -1 ? 0 : a.i % b.i); break;
             case OP_EQI: r = kint(a.i == b.i); break;
@@ -1465,7 +1465,9 @@ static ConstVal cx_long_op(TokType op, ConstVal a, ConstVal b) {
     uint8_t base = (a.t.base == K_ULONG || b.t.base == K_ULONG) ? K_ULONG : K_LONG;
     int64_t x = cx_l(a), y = cx_l(b);
     uint64_t ux = (uint64_t)x, uy = (uint64_t)y;
-    if ((op == T_SLASH || op == T_MOD) && y == 0) cerror("Division by zero in constant");
+    if (op == T_MOD && y == 0) cerror("Mod by zero in constant");
+    if (op == T_SLASH && y == 0)   /* x / 0: the infinity, clamped */
+        return base == K_ULONG ? cnum_l(base, x ? (int64_t)UINT64_MAX : 0) : cnum_l(base, x > 0 ? INT64_MAX : x < 0 ? INT64_MIN : 0);
     switch (op) {
         case T_PLUS: return cnum_l(base, (int64_t)(ux + uy));
         case T_MINUS: return cnum_l(base, (int64_t)(ux - uy));
@@ -1559,7 +1561,6 @@ static ConstVal cx_mul(void) {
         if (a.t.base == K_STRING || b.t.base == K_STRING) cerror("Invalid string operation in constant");
         if (op == T_BACKSLASH) {
             if (a.t.base == K_FLOAT || b.t.base == K_FLOAT) {
-                if (cx_f(b) == 0) cerror("Division by zero in constant");
                 a = cnum_i(fold_f2i(cx_f(a) / cx_f(b)));
                 continue;
             }
@@ -1580,9 +1581,10 @@ static ConstVal cx_mul(void) {
             continue;
         }
         if (a.t.base == K_INT && b.t.base == K_INT) {
-            if ((op == T_SLASH || op == T_MOD) && b.i == 0) cerror("Division by zero in constant");
+            if (op == T_MOD && b.i == 0) cerror("Mod by zero in constant");
             if (op == T_STAR) a.i = (int32_t)((uint32_t)a.i * (uint32_t)b.i);
-            else if (op == T_SLASH) a.i = a.i / b.i;
+            else if (op == T_SLASH) a.i = b.i == 0 ? (a.i > 0 ? INT32_MAX : a.i < 0 ? INT32_MIN : 0)
+                                        : b.i == -1 ? (int32_t)(0u - (uint32_t)a.i) : a.i / b.i;
             else a.i = a.i % b.i;
         } else {
             double x = cx_f(a), y = cx_f(b);

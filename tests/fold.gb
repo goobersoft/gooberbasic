@@ -45,4 +45,4 @@ check("and", (1 and 2) + 3, (a and b) + 3)
 check("or", (0 or 5) * 2, ((a - a) or 5) * 2)
 
 ' still a run-time error, with the right line
-print(10 / (5 - 5))
+print(10 mod (5 - 5))
