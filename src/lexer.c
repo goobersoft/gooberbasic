@@ -29,10 +29,12 @@ static char open_top(Lexer *L) { return L->nopen ? L->open[L->nopen - 1] : 0; }
 static void open_push(Lexer *L, char k) { if (L->nopen < (int)sizeof L->open) L->open[L->nopen++] = k; }
 static void open_pop(Lexer *L, const char *kinds) { if (L->nopen && strchr(kinds, open_top(L))) L->nopen--; }
 
-/* Inside an array or list literal a line may end without ending the statement,
- * so long tables can be written one row per line. */
+/* Inside an array or list literal, or a function's parameter list, a line may
+ * end without ending the statement, so long tables can be written one row per
+ * line and long parameter lists one or a few parameters per line. */
 static bool in_literal(Lexer *L) {
-    for (int i = 0; i < L->nopen; i++) if (L->open[i] == 'a' || L->open[i] == 'l') return true;
+    for (int i = 0; i < L->nopen; i++)
+        if (L->open[i] == 'a' || L->open[i] == 'l' || L->open[i] == 'p') return true;
     return false;
 }
 
@@ -103,6 +105,20 @@ static Token *push_tok(Lexer *L, TokType type) {
 static TokType last_type(Lexer *L) {
     if (L->out->count == 0) return T_NEWLINE;
     return L->out->toks[L->out->count - 1].type;
+}
+
+/* Does a '(' here open a function's parameter list? It does when nothing is
+ * open and the statement so far has a 'function' in it (function f(,
+ * function f:t_point(, local g = function( ). A function type's '(' in the
+ * header counts too (function make:int()(step:int)): either may span lines. */
+static bool opens_params(Lexer *L) {
+    if (L->nopen) return false;
+    for (int i = L->out->count - 1; i >= 0; i--) {
+        TokType t = L->out->toks[i].type;
+        if (t == T_NEWLINE) return false;
+        if (t == T_FUNCTION) return true;
+    }
+    return false;
 }
 
 /* Does the token just made end a value? If not, a '[' or '<' here starts a
@@ -378,8 +394,8 @@ static void lex_source(Lexer *L) {
         }
         L->p++;
         switch (c) {
-            case '(': push_tok(L, T_LPAREN); open_push(L, '('); break;
-            case ')': push_tok(L, T_RPAREN); open_pop(L, "("); break;
+            case '(': open_push(L, opens_params(L) ? 'p' : '('); push_tok(L, T_LPAREN); break;
+            case ')': push_tok(L, T_RPAREN); open_pop(L, "(p"); break;
             case '[': open_push(L, after_value(L) ? '[' : 'a'); push_tok(L, T_LBRACK); break;
             case ']': push_tok(L, T_RBRACK); open_pop(L, "[a"); break;
             case ',': push_tok(L, T_COMMA); break;

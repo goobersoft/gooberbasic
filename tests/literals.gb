@@ -99,3 +99,20 @@ print(count(names))
 ' comparisons still work around them
 local lt:int = 1 < 2
 print(lt + " " + (2 <> 3) + " " + (4 > 3))
+
+' a function's parameters over several lines
+function area:float(x:float, y:float,
+                    w:float,   ' comments are fine here too
+                    h:float)
+    return w * h
+endfunction
+print(area(0, 0, 3, 4))
+function make_adder:int(int)(
+    base:int
+)
+    return function:int(n:int)
+        return base + n
+    endfunction
+endfunction
+local add2:int(int) = make_adder(2)
+print(add2(5))
