@@ -69,7 +69,7 @@ print(twice(21))
 ' loops share the variable
 local fl:int() list = new int() list
 for local i:int = 1 to 3
-    list_add_last(fl, function:int()
+    add_last(fl, function:int()
         return i
     endfunction)
 next
@@ -113,10 +113,10 @@ print(k(4)())
 
 ' lists and arrays of void functions, called as statements
 local handlers:(int) list = new (int) list
-list_add_last(handlers, function(n:int)
+add_last(handlers, function(n:int)
     print("first " + n)
 endfunction)
-list_add_last(handlers, function(n:int)
+add_last(handlers, function(n:int)
     print("second " + n)
 endfunction)
 for local h:(int) = eachin handlers

@@ -1,0 +1,3 @@
+' expect: list_add_last was renamed to add_last
+local q:int list = new int list
+list_add_last(q, 1)

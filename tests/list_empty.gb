@@ -1,0 +1,5 @@
+' removing from an empty list is a runtime error
+local q:string list = new string list
+add_last(q, "only")
+print(remove_last(q))
+print(remove_first(q))

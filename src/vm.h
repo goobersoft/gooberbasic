@@ -47,6 +47,7 @@ ObjInst *inst_new(VM *vm, int tid);
 ObjArray *array_new(VM *vm, uint8_t elemKind, int ndims, const int *dims);
 ObjList *list_new(VM *vm);
 void list_add(VM *vm, ObjList *l, Value v, bool atFront);
+void list_insert_before(VM *vm, ObjList *l, ObjLink *at, Value v);
 void list_unlink(ObjLink *k);
 void list_clear(ObjList *l);
 ObjClosure *closure_new(VM *vm, int fidx, int nup);

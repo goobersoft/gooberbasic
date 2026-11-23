@@ -157,6 +157,18 @@ void list_add(VM *vm, ObjList *l, Value v, bool atFront) {
     l->count++;
 }
 
+/* Puts `v` just before `at`, which must be in `l`. `v` must be reachable from the stack. */
+void list_insert_before(VM *vm, ObjList *l, ObjLink *at, Value v) {
+    ObjLink *k = gc_obj(vm, sizeof(ObjLink), O_LINK);
+    k->list = l;
+    k->value = v;
+    k->prev = at->prev;
+    k->next = at;
+    if (at->prev) at->prev->next = k; else l->head = k;
+    at->prev = k;
+    l->count++;
+}
+
 void list_unlink(ObjLink *k) {
     ObjList *l = k->list;
     if (!l) return;

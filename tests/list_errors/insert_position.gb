@@ -1,0 +1,3 @@
+' expect: insert: the position must be a number
+local q:int list = new int list
+insert(q, "two", 1)

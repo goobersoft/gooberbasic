@@ -21,10 +21,10 @@ for n = 1 to 3
   p:t_player = new t_player
   p.name = "P" + n
   p.hp = n * 10
-  list_add_last(players, p)
+  add_last(players, p)
 next
 for p:t_player = eachin players
-  if p.hp = 20 then list_remove(players, p)
+  if p.hp = 20 then remove(players, p)
 next
 for p = eachin players
   print(p.name + " hp=" + p.hp)

@@ -1,0 +1,2 @@
+only
+tests/list_empty.gb:5: runtime error: remove_first: the list is empty

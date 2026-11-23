@@ -26,7 +26,7 @@ print(add(1) + add(1, 2))
 local l:t_thing list = new t_thing list
 local t:t_thing = new t_thing
 t.name = "bob"
-list_add_last(l, t)
+add_last(l, t)
 for local x = eachin l
     print(x.name)
 next

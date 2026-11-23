@@ -692,10 +692,22 @@ static bool is_type_name(const char *l) {
 }
 
 /* List commands are compiler intrinsics (they check the element type).
- * Order matters: the first four take a value. */
+ * Order matters, see the LF_ indexes below. The natives are "__" + name. */
 static const char *const LIST_FNS[] = {
-    "list_add_first", "list_add_last", "list_remove", "list_contains",
-    "count_list", "list_is_empty", "clear_list", NULL
+    "add_first", "add_last", "remove", "contains",     /* (list, value) */
+    "insert",                                          /* (list, position, value) */
+    "count", "is_empty", "clear",                      /* (list) */
+    "first", "last", "remove_first", "remove_last",    /* (list) -> an element */
+    NULL
+};
+enum { LF_REMOVE = 2, LF_CONTAINS = 3, LF_INSERT = 4, LF_COUNT = 5, LF_IS_EMPTY = 6, LF_FIRST = 8 };
+
+/* the names they had before, so old code gets told what to write instead */
+static const char *const OLD_LIST_FNS[][2] = {
+    {"list_add_first", "add_first"}, {"list_add_last", "add_last"}, {"list_remove", "remove"},
+    {"list_contains", "contains"}, {"count_list", "count"}, {"list_is_empty", "is_empty"},
+    {"clear_list", "clear"}, {"list_first", "first"}, {"list_last", "last"},
+    {NULL, NULL}
 };
 
 static const char *renamed_builtin(const char *text);
@@ -1815,9 +1827,15 @@ static int list_fn_index(const char *lower) {
     return -1;
 }
 
-/* list_add_first / list_add_last / list_remove / list_contains (list, value),
- * count_list / list_is_empty / clear_list (list). The value must have the
- * list's element type; an int may go into a float list. */
+static void old_list_fn_check(Token *id) {
+    for (int i = 0; OLD_LIST_FNS[i][0]; i++)
+        if (!strcmp(OLD_LIST_FNS[i][0], id->lower))
+            cerror_at(id, "%s was renamed to %s", id->text, OLD_LIST_FNS[i][1]);
+}
+
+/* add_first / add_last / remove / contains (list, value), insert (list, position, value),
+ * count / is_empty / clear / first / last / remove_first / remove_last (list).
+ * The value must have the list's element type; an int may go into a float list. */
 static VType list_call(Token *id, int which, bool parens) {
     const char *fn = LIST_FNS[which];
     if (!parens) need_parens(LIST_FNS[which]);
@@ -1826,7 +1844,15 @@ static VType list_call(Token *id, int which, bool parens) {
     VType lt = expr();
     if (lt.dims || lt.base != K_LIST) cerror_at(at, "%s needs a list as its first argument, got %s", fn, type_str(lt));
     int argc = 1;
-    if (which <= 3) {
+    if (which == LF_INSERT) {
+        expect(T_COMMA, "','");
+        Token *ptok = peek();
+        VType p = expr();
+        if (p.dims || !is_num(p)) cerror_at(ptok, "%s: the position must be a number, got %s", fn, type_str(p));
+        coerce(p, vt(K_INT), fn);
+        argc = 2;
+    }
+    if (which <= LF_INSERT) {
         expect(T_COMMA, "','");
         Token *vtok = peek();
         VType v = expr();
@@ -1840,13 +1866,15 @@ static VType list_call(Token *id, int which, bool parens) {
             cerror_at(vtok, "%s: cannot put %s %s into %s %s", fn,
                       v.base == K_INT || v.base == K_OBJ ? "an" : "a", type_str(v),
                       lt.elem == K_INT || lt.elem == K_OBJ ? "an" : "a", type_str(lt));
-        argc = 2;
+        argc++;
     }
     if (parens) expect(T_RPAREN, "')'");
     char nn[40];
     snprintf(nn, sizeof nn, "__%s", fn);
     emit_op2(OP_NATIVE, native_or_die(nn), argc);
-    return (which == 3 || which == 4 || which == 5) ? vt(K_INT) : vt(K_VOID);
+    if (which >= LF_FIRST) return list_elem(lt);
+    if (which == LF_REMOVE || which == LF_CONTAINS || which == LF_COUNT || which == LF_IS_EMPTY) return vt(K_INT);
+    return vt(K_VOID);
 }
 
 /* Built-in functions that need special typing. Returns true if handled. */
@@ -1854,11 +1882,12 @@ static bool intrinsic(Token *id, VType *out) {
     const char *n = id->lower;
     bool hasParen = pt() == T_LPAREN;
 
-    if (!strcmp(n, "first") || !strcmp(n, "last") || !strcmp(n, "after") || !strcmp(n, "before"))
+    if (!strcmp(n, "after") || !strcmp(n, "before"))
         cerror_at(id, "%s was removed: types no longer keep a list of every instance. "
                       "Keep objects in a list and loop with for x:t_foo = eachin list", id->text);
     if (!strcmp(n, "create_list"))
         cerror_at(id, "create_list was replaced by typed lists, e.g. new int list or new t_enemy list");
+    old_list_fn_check(id);
     int li = list_fn_index(n);
     if (li >= 0) {
         VType r = list_call(id, li, hasParen);
@@ -2495,7 +2524,7 @@ static void call_statement(Token *id) {
     int li = f ? -1 : list_fn_index(id->lower);
     int n = f || li >= 0 ? -1 : native_find(id->lower);
     if (!f) private_func_check(id);
-    if (!f && li < 0 && n < 0) unknown_name(id, "command or function");
+    if (!f && li < 0 && n < 0) { old_list_fn_check(id); unknown_name(id, "command or function"); }
     if (f) { VType r = call_user(f, parens); call_chain_statement(r, true); }
     else if (li >= 0) { list_call(id, li, parens); emit_op(OP_POP); }
     else { call_native(n, parens); emit_op(OP_POP); }
@@ -2940,7 +2969,7 @@ static void statement(void) {
         case T_END: advance(); emit_op(OP_END); return;
         case T_DELETE:
             cerror_at(t, "delete was removed: objects are freed automatically once nothing refers to them. "
-                         "Set the variable to null, or list_remove it from its list");
+                         "Set the variable to null, or remove it from its list");
         case T_FUNCTION: advance(); function_statement(t); return;
         case T_TYPE: {
             if (!C.F->isMain || C.depth > 0) cerror_at(t, "Types must be declared at the top level");

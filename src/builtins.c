@@ -381,35 +381,85 @@ static bool values_equal(Value a, Value b) {
     }
 }
 
-static ObjLink *find_link(ObjList *l, Value v) {
-    for (ObjLink *k = l->head; k; k = k->next) if (values_equal(k->value, v)) return k;
+/* The first link holding `v` and its position (counted from 1), or NULL and 0. */
+static ObjLink *find_link(ObjList *l, Value v, int *pos) {
+    int i = 1;
+    for (ObjLink *k = l->head; k; k = k->next, i++)
+        if (values_equal(k->value, v)) { *pos = i; return k; }
+    *pos = 0;
     return NULL;
+}
+
+static ObjList *need_items(VM *vm, Value v, const char *fn) {
+    ObjList *l = need_list(vm, v, fn);
+    if (!l->head) vm_error(vm, "%s: the list is empty", fn);
+    return l;
+}
+
+static void no_null(VM *vm, Value v, const char *fn) {
+    /* the empty string is also a NULL pointer, so check the kind too */
+    if (v.kind == K_OBJ && !v.as.o) vm_error(vm, "%s: cannot add null to a list", fn);
 }
 
 static Value n_list_new(VM *vm, int argc, Value *args) { (void)argc; (void)args; return v_list(list_new(vm)); }
 
 static void add_common(VM *vm, Value *args, bool front, const char *fn) {
     ObjList *l = need_list(vm, args[0], fn);
-    /* the empty string is also a NULL pointer, so check the kind too */
-    if (args[1].kind == K_OBJ && !args[1].as.o) vm_error(vm, "%s: cannot add null to a list", fn);
+    no_null(vm, args[1], fn);
     list_add(vm, l, args[1], front);
 }
-static Value n_list_add_last(VM *vm, int argc, Value *args) { (void)argc; add_common(vm, args, false, "list_add_last"); return v_int(0); }
-static Value n_list_add_first(VM *vm, int argc, Value *args) { (void)argc; add_common(vm, args, true, "list_add_first"); return v_int(0); }
+static Value n_add_last(VM *vm, int argc, Value *args) { (void)argc; add_common(vm, args, false, "add_last"); RET_VOID; }
+static Value n_add_first(VM *vm, int argc, Value *args) { (void)argc; add_common(vm, args, true, "add_first"); RET_VOID; }
 
-static Value n_list_remove(VM *vm, int argc, Value *args) {
+/* insert(list, n, value): value becomes item n; below 1 goes first, past the end goes last */
+static Value n_insert(VM *vm, int argc, Value *args) {
     (void)argc;
-    ObjLink *k = find_link(need_list(vm, args[0], "list_remove"), args[1]);
+    ObjList *l = need_list(vm, args[0], "insert");
+    no_null(vm, args[2], "insert");
+    int n = ARG_I(1);
+    if (n <= 1 || !l->head) { list_add(vm, l, args[2], true); RET_VOID; }
+    if (n > l->count) { list_add(vm, l, args[2], false); RET_VOID; }
+    ObjLink *at = l->head;
+    for (int i = 1; i < n; i++) at = at->next;
+    list_insert_before(vm, l, at, args[2]);
+    RET_VOID;
+}
+
+/* remove(list, value): takes out the first matching item; its position, or 0 if none matched */
+static Value n_remove(VM *vm, int argc, Value *args) {
+    (void)argc;
+    int pos;
+    ObjLink *k = find_link(need_list(vm, args[0], "remove"), args[1], &pos);
     if (k) list_unlink(k);
-    return v_int(0);
+    return v_int(pos);
 }
-static Value n_list_contains(VM *vm, int argc, Value *args) {
+/* contains(list, value): the position of the first matching item, or 0 */
+static Value n_contains(VM *vm, int argc, Value *args) {
     (void)argc;
-    return v_int(find_link(need_list(vm, args[0], "list_contains"), args[1]) != NULL);
+    int pos;
+    find_link(need_list(vm, args[0], "contains"), args[1], &pos);
+    return v_int(pos);
 }
-static Value n_count_list(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "count_list")->count); }
-static Value n_list_is_empty(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "list_is_empty")->count == 0); }
-static Value n_clear_list(VM *vm, int argc, Value *args) { (void)argc; list_clear(need_list(vm, args[0], "clear_list")); return v_int(0); }
+static Value n_count(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "count")->count); }
+static Value n_is_empty(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "is_empty")->count == 0); }
+static Value n_clear(VM *vm, int argc, Value *args) { (void)argc; list_clear(need_list(vm, args[0], "clear")); RET_VOID; }
+
+static Value n_first(VM *vm, int argc, Value *args) { (void)argc; return need_items(vm, args[0], "first")->head->value; }
+static Value n_last(VM *vm, int argc, Value *args) { (void)argc; return need_items(vm, args[0], "last")->tail->value; }
+static Value n_remove_first(VM *vm, int argc, Value *args) {
+    (void)argc;
+    ObjLink *k = need_items(vm, args[0], "remove_first")->head;
+    Value v = k->value;
+    list_unlink(k);
+    return v;
+}
+static Value n_remove_last(VM *vm, int argc, Value *args) {
+    (void)argc;
+    ObjLink *k = need_items(vm, args[0], "remove_last")->tail;
+    Value v = k->value;
+    list_unlink(k);
+    return v;
+}
 
 /* ---- garbage collector ---- */
 static Value n_gccollect(VM *vm, int argc, Value *args) { (void)argc; (void)args; gc_collect(vm); return v_int(0); }
@@ -450,13 +500,19 @@ static Value n_read_string(VM *vm, int argc, Value *args) { (void)argc; (void)ar
 
 NativeDef gb_core_natives[] = {
     {"__list_new", 'v', "", n_list_new},
-    {"__list_add_first", 'v', "", n_list_add_first},
-    {"__list_add_last", 'v', "", n_list_add_last},
-    {"__list_remove", 'v', "", n_list_remove},
-    {"__list_contains", 'i', "", n_list_contains},
-    {"__count_list", 'i', "", n_count_list},
-    {"__list_is_empty", 'i', "", n_list_is_empty},
-    {"__clear_list", 'v', "", n_clear_list},
+    {"__add_first", 'v', "", n_add_first},
+    {"__add_last", 'v', "", n_add_last},
+    {"__remove", 'i', "", n_remove},
+    {"__contains", 'i', "", n_contains},
+    {"__insert", 'v', "", n_insert},
+    {"__count", 'i', "", n_count},
+    {"__is_empty", 'i', "", n_is_empty},
+    {"__clear", 'v', "", n_clear},
+    /* these return an element; the compiler knows its type, the 'v' here is never read */
+    {"__first", 'v', "", n_first},
+    {"__last", 'v', "", n_last},
+    {"__remove_first", 'v', "", n_remove_first},
+    {"__remove_last", 'v', "", n_remove_last},
     {"gc_collect", 'v', "", n_gccollect},
     {"gc_mem_alloced", 'i', "", n_gcmemalloced},
 

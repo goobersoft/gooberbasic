@@ -20,7 +20,7 @@ for round = 1 to 200
     n.value = round
     local ks:t_node[3]
     n.kids = ks
-    if round mod 2 = 0 then list_add_last(kept, n) ' the odd ones become garbage
+    if round mod 2 = 0 then add_last(kept, n) ' the odd ones become garbage
 next
 n = null
 print("total=" + total)
@@ -44,7 +44,7 @@ grew = gc_mem_alloced() - before
 if grew < 1024 then print("garbage reclaimed") else print("LEAK: " + grew + " bytes")
 
 ' dropping the only reference to a list frees the list and everything in it
-clear_list(kept)
+clear(kept)
 kept = null
 gc_collect()
 if gc_mem_alloced() < before then print("list freed")

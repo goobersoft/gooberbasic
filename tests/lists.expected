@@ -3,9 +3,16 @@
 0 2 6 
 contains four: 0
 seen=1 empty=1
-ints: 10 30 20 contains 20: 1
+ints: 10 30 20 contains 20: 3
 floats: 1.0 2.5 
 strings: [][basic] count=2
 bag: 1
 rows[1]: 1
-tests/lists.gb:95: runtime error: eachin: the list is null
+first=10 last=50
+took=60 count=3
+first .n=7
+contains 30: 2 contains 99: 0
+remove 30: 2 remove 99: 0
+insert: axbcd count=5
+vars: 3z list count=5
+tests/lists.gb:126: runtime error: eachin: the list is null

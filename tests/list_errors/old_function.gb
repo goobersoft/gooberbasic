@@ -1,0 +1,3 @@
+' expect: count_list was renamed to count
+local q:int list = new int list
+print(count_list(q))

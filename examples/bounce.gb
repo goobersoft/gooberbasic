@@ -15,7 +15,7 @@ function add_ball(x#, y#)
     b.dx = rnd(-4, 4) : b.dy = rnd(-4, 4)
     b.r = rnd(8, 30)
     b.red = rand(80, 255) : b.green = rand(80, 255) : b.blue = rand(80, 255)
-    list_add_last(balls, b)
+    add_last(balls, b)
 endfunction
 
 app_title("GooberBASIC - Bouncing Balls")
@@ -42,6 +42,6 @@ while not key_hit(KEY_ESCAPE)
     next
 
     set_color(255, 255, 255)
-    draw_text("Balls: " + count_list(balls) + "   (click to add, Esc to quit)", 10, 10)
+    draw_text("Balls: " + count(balls) + "   (click to add, Esc to quit)", 10, 10)
     flip()
 wend

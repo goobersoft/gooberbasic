@@ -24,8 +24,8 @@ global drops:t_drop list = new t_drop list    ' objects live as long as somethin
 global sparks:t_spark list = new t_spark list
 
 function reset_game()
-    clear_list(drops)
-    clear_list(sparks)
+    clear(drops)
+    clear(sparks)
     score = 0 : lives = 3
     spawn_timer = 0 : difficulty = 1.0
     game_over = false
@@ -39,7 +39,7 @@ function burst(x:float, y:float, n:int)
         local ang:float = rnd(0, 360), spd:float = rnd(1, 4)
         s.dx = cos(ang) * spd : s.dy = sin(ang) * spd
         s.life = rand(20, 40)
-        list_add_last(sparks, s)
+        add_last(sparks, s)
     next
 endfunction
 
@@ -54,7 +54,7 @@ function update_game()
         d.x = rnd(20, W - 20) : d.y = -20
         d.speed = rnd(2, 3.5) * difficulty
         d.bad = rand(1, 5) = 1
-        list_add_last(drops, d)
+        add_last(drops, d)
         spawn_timer = int(45 / difficulty)
     endif
     difficulty = min(difficulty + 0.0005, 3.0)
@@ -71,9 +71,9 @@ function update_game()
                 score :+ 10
                 burst(d.x, d.y, 8)
             endif
-            list_remove(drops, d)
+            remove(drops, d)
         elseif d.y > H + 20
-            list_remove(drops, d)
+            remove(drops, d)
         endif
     next
 endfunction
@@ -100,7 +100,7 @@ function draw_game()
         set_color(255, 230, 120)
         set_alpha(s.life / 40.0)
         draw_rect(s.x, s.y, 3, 3)
-        if s.life <= 0 then list_remove(sparks, s)
+        if s.life <= 0 then remove(sparks, s)
     next
     set_alpha(1)
     set_color(200, 160, 90)

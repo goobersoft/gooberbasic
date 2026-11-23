@@ -15,19 +15,19 @@ function dump(l:t_a list)
     for local a:t_a = eachin l
         out :+ a.n + " "
     next
-    print("[" + trim(out) + "] count=" + count_list(l))
+    print("[" + trim(out) + "] count=" + count(l))
 endfunction
 
 local l:t_a list = new t_a list
 for local i:int = 1 to 6
-    list_add_last(l, make_a(i))
+    add_last(l, make_a(i))
 next
-list_add_first(l, make_a(0))
+add_first(l, make_a(0))
 dump(l)
 
 ' removing the current element inside eachin is safe
 for local a:t_a = eachin l
-    if a.n mod 2 = 1 then list_remove(l, a)
+    if a.n mod 2 = 1 then remove(l, a)
 next
 dump(l)
 
@@ -38,45 +38,45 @@ for local a:t_a = eachin l
 next
 for local a:t_a = eachin l
     write(a.n + " ")
-    if a.n = 2 then list_remove(l, four)
+    if a.n = 2 then remove(l, four)
 next
 print("")
-print("contains four: " + list_contains(l, four))
+print("contains four: " + contains(l, four))
 
-' clear_list while iterating ends the loop cleanly
+' clear while iterating ends the loop cleanly
 local seen:int = 0
 for local a:t_a = eachin l
     seen :+ 1
-    clear_list(l)
+    clear(l)
 next
-print("seen=" + seen + " empty=" + list_is_empty(l))
+print("seen=" + seen + " empty=" + is_empty(l))
 
-' lists of values; list_remove and list_contains compare by value
+' lists of values; remove and contains compare by value
 local q:int list = new int list
-list_add_first(q, 10)
-list_add_last(q, 20)
-list_add_last(q, 30)
-list_add_last(q, 20)
-list_remove(q, 20)          ' removes the first 20 only
+add_first(q, 10)
+add_last(q, 20)
+add_last(q, 30)
+add_last(q, 20)
+remove(q, 20)          ' removes the first 20 only
 local s:string = ""
 for local n:int = eachin q : s :+ n + " " : next
-print("ints: " + s + "contains 20: " + list_contains(q, 20))
+print("ints: " + s + "contains 20: " + contains(q, 20))
 
 local f:float list = new float list
-list_add_last(f, 1)         ' an int is fine in a float list
-list_add_last(f, 2.5)
+add_last(f, 1)         ' an int is fine in a float list
+add_last(f, 2.5)
 s = ""
 for local x:float = eachin f : s :+ x + " " : next
 print("floats: " + s)
 
 local words:string list = new string list
-list_add_last(words, "goober")
-list_add_last(words, "")    ' the empty string is a value too
-list_add_last(words, "basic")
-list_remove(words, "goober")
+add_last(words, "goober")
+add_last(words, "")    ' the empty string is a value too
+add_last(words, "basic")
+remove(words, "goober")
 s = ""
 for local w:string = eachin words : s :+ "[" + w + "]" : next
-print("strings: " + s + " count=" + count_list(words))
+print("strings: " + s + " count=" + count(words))
 
 ' a list in a field, and an array of lists
 type t_bag
@@ -84,12 +84,43 @@ type t_bag
 endtype
 local bag:t_bag = new t_bag
 bag.items = new string list
-list_add_last(bag.items, "key")
-print("bag: " + count_list(bag.items))
+add_last(bag.items, "key")
+print("bag: " + count(bag.items))
 local rows:int list[2]
 rows[1] = new int list
-list_add_last(rows[1], 5)
-print("rows[1]: " + count_list(rows[1]))
+add_last(rows[1], 5)
+print("rows[1]: " + count(rows[1]))
+
+
+' first / last / remove_first / remove_last give back the element's own type
+local d:int list = new int list
+for local i:int = 1 to 5 : add_last(d, i * 10) : next
+print("first=" + first(d) + " last=" + last(d))
+local took:int = remove_first(d) + remove_last(d)
+print("took=" + took + " count=" + count(d))
+local m:t_a list = new t_a list
+add_last(m, make_a(7))
+print("first .n=" + first(m).n)
+
+' positions count from 1; 0 means not there
+print("contains 30: " + contains(d, 30) + " contains 99: " + contains(d, 99))
+print("remove 30: " + remove(d, 30) + " remove 99: " + remove(d, 99))
+
+' insert clamps: below 1 goes first, past the end goes last
+local p:string list = new string list
+insert(p, 1, "b")       ' into an empty list
+insert(p, -5, "a")
+insert(p, 99, "d")
+insert(p, 3, "c")       ' becomes item 3
+insert(p, 2.6, "x")     ' a float position is cut to a whole number, like int()
+s = ""
+for local w:string = eachin p : s :+ w : next
+print("insert: " + s + " count=" + count(p))
+
+' a variable may still be called count, first or last
+local count:int = 3
+local last:string = "z"
+print("vars: " + count + last + " list count=" + count(p))
 
 local nothing:t_a list
 for local a:t_a = eachin nothing

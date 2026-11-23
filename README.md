@@ -80,7 +80,7 @@ GooberBASIC code is written in lowercase, with `snake_case` to separate words:
 | Variables, fields, functions | `snake_case` | `spawn_timer`, `reset_game()` |
 | Types | `t_` + `snake_case` | `t_enemy`, `t_power_up` |
 | Constants | `UPPER_SNAKE_CASE` | `MAX_ENEMIES`, `KEY_ESCAPE` |
-| Built-in commands | `snake_case` | `draw_rect`, `key_hit`, `list_add_last` |
+| Built-in commands | `snake_case` | `draw_rect`, `key_hit`, `add_last` |
 | Calls | always with parentheses | `cls()`, `set_color(255, 0, 0)`, `reset_game()` |
 
 Every built-in name follows this style, so old Blitz spellings like `DrawRect` or
@@ -361,13 +361,13 @@ e:t_enemy = new t_enemy
 e.x = 100 : e.hp = 3
 
 global enemies:t_enemy list = new t_enemy list
-list_add_last(enemies, e)
+add_last(enemies, e)
 
 for e:t_enemy = eachin enemies                ' visit every t_enemy in the list, in order
-    if e.hp <= 0 then list_remove(enemies, e) ' removing inside eachin is safe
+    if e.hp <= 0 then remove(enemies, e)      ' removing inside eachin is safe
 next
 
-clear_list(enemies)                           ' drop them all
+clear(enemies)                                ' drop them all
 ```
 
 ### Object lifetime (garbage collection)
@@ -376,12 +376,12 @@ As in BlitzMax, **there is no `delete`**. An object stays alive as long as somet
 refers to it: a variable, a field, an array element, or a list. Once nothing
 does, the garbage collector frees it automatically, including groups of objects
 that only refer to each other. To get rid of an object, set its variable to `null`
-or `list_remove` it from its list. Strings and arrays work the same way. Using a
+or `remove` it from its list. Strings and arrays work the same way. Using a
 `null` object is a runtime error ("Object does not exist (null)").
 
-The BlitzBasic forms `delete`, `for ... = each t_type`, `first`, `last`, `after` and
-`before` were removed: types no longer keep a hidden list of every instance. The
-compiler names the replacement if you use one of them.
+The BlitzBasic forms `delete`, `for ... = each t_type`, `after` and `before` were
+removed: types no longer keep a hidden list of every instance. The compiler names the
+replacement if you use one of them. (`first` and `last` now work on a list: see below.)
 
 ## Lists
 
@@ -391,9 +391,9 @@ Create one with `new`:
 
 ```basic
 local q:int list = new int list
-list_add_first(q, 10)
-list_add_last(q, 20)
-list_add_last(q, "some string")     ' compile error: cannot put a string into an int list
+add_first(q, 10)
+add_last(q, 20)
+add_last(q, "some string")          ' compile error: cannot put a string into an int list
 
 for local n:int = eachin q          ' visits 10, then 20
     print(n)
@@ -408,12 +408,30 @@ next
   `field items:string list`, `local rows:int list[4]`.
 - A list variable starts as `null`; give it a list with `new int list` before using it.
 
-`list_add_last(list, value)` · `list_add_first(list, value)` · `list_remove(list, value)` ·
-`list_contains(list, value)` · `count_list(list)` · `list_is_empty(list)` · `clear_list(list)`
+| Command | What it does |
+|---|---|
+| `add_first(list, value)` · `add_last(list, value)` | put a value at the start / the end |
+| `insert(list, n, value)` | make `value` item `n` (items count from 1); `n` below 1 puts it first, past the end puts it last |
+| `first(list)` · `last(list)` | the first / last item |
+| `remove_first(list)` · `remove_last(list)` | take the first / last item out and return it |
+| `remove(list, value)` | take out the first matching item; returns its position, or 0 if none matched |
+| `contains(list, value)` | the position of the first matching item, or 0, so it works in an `if` |
+| `count(list)` | how many items there are |
+| `is_empty(list)` | 1 if there are none |
+| `clear(list)` | take every item out |
 
-`list_remove` removes the first matching item. It and `list_contains` compare by value
-for `int`, `float` and `string` lists, and by identity (the same object) for object lists.
-Both search the list, so they take longer on long lists.
+`first`, `last`, `remove_first` and `remove_last` return the list's element type
+(`first(enemies).hp` works) and are a runtime error on an empty list, so check
+`is_empty` first when the list might be empty.
+
+`remove` and `contains` compare by value for `int`, `float` and `string` lists, and by
+identity (the same object) for object lists. Both search the list, so they take longer on
+long lists. The other commands take the same time however long the list is, except
+`insert`, which walks to position `n`.
+
+These names are only commands when you call them: a variable or function of your own
+called `count`, `first` or `last` still works. The old names (`list_add_last`,
+`count_list`, `clear_list` ...) are a compile error that names the new one.
 
 Inside an `eachin` loop you may remove the current item, or any other one, and the loop
 carries on correctly. Using `eachin` on a `null` list is a runtime error.
@@ -599,7 +617,7 @@ Debugging aids: `GOOBER_GC_STRESS=1` runs the garbage collector on every allocat
 
 ## Roadmap ideas
 - Port `src/gfx.c` to SDL3 (nothing else depends on SDL).
-- `eachin` over arrays; `list_first`/`list_last` (they can return the element type now that lists are typed).
+- `eachin` over arrays.
 - File I/O (`read_file`, `write_line`, ...), `split` returning `string[]`.
 - Render-to-image (`create_image`, `set_buffer`), pixel collision, animated image strips.
 - `goto`/`gosub` and `data`/`read` for classic-BASIC compatibility.

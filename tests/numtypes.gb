@@ -137,12 +137,12 @@ px.id = -1
 print("field byte = " + px.r + ", field long = " + px.id)
 
 local q:short list = new short list
-list_add_last(q, 70000)
-list_add_last(q, 5)
+add_last(q, 70000)
+add_last(q, 5)
 for local e:short = eachin q
     print("short list item " + e)
 next
-print("contains 4464: " + list_contains(q, 4464))
+print("contains 4464: " + contains(q, 4464))
 
 function half:sint64(v:sint64)
     return v / 2

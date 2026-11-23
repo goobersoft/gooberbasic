@@ -23,10 +23,10 @@ function describe:string(m:t_monster)
 endfunction
 
 local monsters:t_monster list = new t_monster list
-list_add_last(monsters, spawn_monster("Blob", 10))
-list_add_last(monsters, spawn_monster("Goober", 25, 2.5))
-list_add_last(monsters, spawn_monster("Slime", 3, 0.5))
-list_add_last(monsters, spawn_monster("Gnasher", 40, 1.75))
+add_last(monsters, spawn_monster("Blob", 10))
+add_last(monsters, spawn_monster("Goober", 25, 2.5))
+add_last(monsters, spawn_monster("Slime", 3, 0.5))
+add_last(monsters, spawn_monster("Gnasher", 40, 1.75))
 
 print("All monsters:")
 for local m:t_monster = eachin monsters
@@ -36,7 +36,7 @@ next
 ' Remove the weak ones while iterating - this is safe in GooberBASIC.
 ' Once removed, nothing refers to them and the GC frees them.
 for local m:t_monster = eachin monsters
-    if m.hp < 15 then list_remove(monsters, m)
+    if m.hp < 15 then remove(monsters, m)
 next
 
 print("Survivors:")
@@ -44,7 +44,7 @@ for local m:t_monster = eachin monsters
     print("  " + describe(m))
 next
 
-print(count_list(monsters) + " monsters left")
+print(count(monsters) + " monsters left")
 
 ' Arrays
 local scores:int[5]
