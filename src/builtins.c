@@ -171,11 +171,40 @@ static Value n_maxi(VM *vm, int argc, Value *args) { (void)vm; (void)argc; retur
 static Value n_minf(VM *vm, int argc, Value *args) { (void)vm; (void)argc; return v_float(ARG_F(0) < ARG_F(1) ? ARG_F(0) : ARG_F(1)); }
 static Value n_maxf(VM *vm, int argc, Value *args) { (void)vm; (void)argc; return v_float(ARG_F(0) > ARG_F(1) ? ARG_F(0) : ARG_F(1)); }
 
-static Value n_rectsoverlap(VM *vm, int argc, Value *args) {
+/* ---- collision ----
+ * A rect covers x .. x+w with its right and bottom edges left out, like the
+ * pixels draw_rect fills: rects that only share an edge don't overlap. A
+ * circle holds the points on its edge; circles that only touch don't overlap. */
+
+static Value n_inrange(VM *vm, int argc, Value *args) {
+    (void)vm; (void)argc;
+    double x = ARG_F(0);
+    return v_int(x >= ARG_F(1) && x <= ARG_F(2));
+}
+
+static Value n_inrect(VM *vm, int argc, Value *args) {
+    (void)vm; (void)argc;
+    double x = ARG_F(0), y = ARG_F(1), rx = ARG_F(2), ry = ARG_F(3);
+    return v_int(x >= rx && x < rx + ARG_F(4) && y >= ry && y < ry + ARG_F(5));
+}
+
+static Value n_rectinrect(VM *vm, int argc, Value *args) {
     (void)vm; (void)argc;
     double x1 = ARG_F(0), y1 = ARG_F(1), w1 = ARG_F(2), h1 = ARG_F(3);
     double x2 = ARG_F(4), y2 = ARG_F(5), w2 = ARG_F(6), h2 = ARG_F(7);
     return v_int(x1 < x2 + w2 && x2 < x1 + w1 && y1 < y2 + h2 && y2 < y1 + h1);
+}
+
+static Value n_incircle(VM *vm, int argc, Value *args) {
+    (void)vm; (void)argc;
+    double dx = ARG_F(0) - ARG_F(2), dy = ARG_F(1) - ARG_F(3), r = ARG_F(4);
+    return v_int(dx * dx + dy * dy <= r * r);
+}
+
+static Value n_circleincircle(VM *vm, int argc, Value *args) {
+    (void)vm; (void)argc;
+    double dx = ARG_F(0) - ARG_F(3), dy = ARG_F(1) - ARG_F(4), r = ARG_F(2) + ARG_F(5);
+    return v_int(dx * dx + dy * dy < r * r);
 }
 
 static Value n_distance(VM *vm, int argc, Value *args) {
@@ -559,7 +588,11 @@ NativeDef gb_core_natives[] = {
     {"floor", 'f', "f", n_floor},
     {"ceil", 'f', "f", n_ceil},
     {"round", 'f', "f", n_round},
-    {"rects_overlap", 'i', "ffffffff", n_rectsoverlap},
+    {"in_range", 'i', "fff", n_inrange},
+    {"in_rect", 'i', "ffffff", n_inrect},
+    {"rect_in_rect", 'i', "ffffffff", n_rectinrect},
+    {"in_circle", 'i', "fffff", n_incircle},
+    {"circle_in_circle", 'i', "ffffff", n_circleincircle},
     {"distance", 'f', "ffff", n_distance},
 
     {"left", 's', "si", n_left},

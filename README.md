@@ -187,7 +187,7 @@ local d:double = 0.1       ' 64-bit
 |---|---|
 | `^` | power (always `float`) |
 | unary `-` `+` `~` | `~` is bitwise NOT |
-| `*` `/` `\` `mod` `shl` `shr` `sar` | `int / int` stays an `int` (`7 / 2 = 3`); `\` is integer division for floats too (`7.5 \ 2 = 3`) |
+| `*` `/` `\` `mod` `shl` `shr` `sar` | `int / int` stays an `int` (`7 / 2 = 3`); `\` is integer division for floats too (`7.5 \ 2 = 3`); dividing by 0 clamps to the type's biggest value (smallest if negative, `0 / 0 = 0`); `mod 0` is an error |
 | `+` `-` | `+` joins strings; a number joined to a string becomes text |
 | `&` `\|` `~` | bitwise AND, OR, XOR |
 | `=` `<>` `<` `>` `<=` `>=` | give 1 or 0; strings compare alphabetically |
@@ -545,8 +545,17 @@ the assertion passes.
 ### Math
 `abs` `sgn` `min` `max` (keep `int` if all arguments are `int`) ·
 `sin` `cos` `tan` `asin` `acos` `atan` `atan2(y, x)` · `sqr` `exp` `log` `log10` ·
-`floor` `ceil` `round` · `distance(x1, y1, x2, y2)` ·
-`rects_overlap(x1, y1, w1, h1, x2, y2, w2, h2)`
+`floor` `ceil` `round` · `distance(x1, y1, x2, y2)`
+
+### Collision
+Each returns 1 or 0.
+`in_range(x, low, high)` (low <= x <= high) · `in_rect(x, y, rx, ry, rw, rh)` (point in rect) ·
+`rect_in_rect(x1, y1, w1, h1, x2, y2, w2, h2)` (rects overlap) ·
+`in_circle(x, y, cx, cy, r)` (point in circle) · `circle_in_circle(x1, y1, r1, x2, y2, r2)` (circles overlap)
+
+A rect covers `x` up to but not including `x + w`, the pixels `draw_rect` fills, so rects
+that only share an edge don't overlap. A point on a circle's edge is inside it, but two
+circles that only touch don't overlap.
 
 ### Memory
 `gc_collect()` (run the garbage collector now) · `gc_mem_alloced()` (bytes in use by live objects)

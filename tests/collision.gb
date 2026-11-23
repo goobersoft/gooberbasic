@@ -1,0 +1,10 @@
+' collision commands: edges, insides and misses
+print(in_range(5, 0, 10) + " " + in_range(0, 0, 10) + " " + in_range(10, 0, 10) + " " + in_range(10.5, 0, 10) + " " + in_range(-1, 0, 10))
+' a 10x10 rect at (0, 0) covers 0 .. 9.99, not 10
+print(in_rect(0, 0, 0, 0, 10, 10) + " " + in_rect(9.5, 9.5, 0, 0, 10, 10) + " " + in_rect(10, 5, 0, 0, 10, 10) + " " + in_rect(5, 10, 0, 0, 10, 10) + " " + in_rect(-1, 5, 0, 0, 10, 10))
+' overlap, shared edge, apart, one inside the other, a plus sign
+print(rect_in_rect(0, 0, 10, 10, 5, 5, 10, 10) + " " + rect_in_rect(0, 0, 10, 10, 10, 0, 10, 10) + " " + rect_in_rect(0, 0, 10, 10, 20, 20, 5, 5) + " " + rect_in_rect(0, 0, 10, 10, 2, 2, 3, 3) + " " + rect_in_rect(4, 0, 2, 10, 0, 4, 10, 2))
+' the edge counts for a point
+print(in_circle(3, 4, 0, 0, 5) + " " + in_circle(3, 4.1, 0, 0, 5) + " " + in_circle(0, 0, 0, 0, 0))
+' overlap, touching, apart, one inside the other
+print(circle_in_circle(0, 0, 5, 8, 0, 5) + " " + circle_in_circle(0, 0, 5, 10, 0, 5) + " " + circle_in_circle(0, 0, 5, 20, 0, 5) + " " + circle_in_circle(0, 0, 10, 1, 1, 2))
