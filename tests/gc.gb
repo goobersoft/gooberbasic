@@ -7,7 +7,7 @@ type t_node
     field other:t_node
 endtype
 
-kept:t_node list = new t_node list
+kept:list<t_node> = new list<t_node>
 total = 0
 for round = 1 to 200
     local big:string[1000]

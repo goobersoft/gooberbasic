@@ -1,0 +1,3 @@
+' expect: count: cannot put a string into a list<int>
+local q:list<int> = new list<int>
+print(count(q, "x"))

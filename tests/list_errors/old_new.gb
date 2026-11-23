@@ -1,0 +1,4 @@
+' expect: List types are written list<t_a> now
+type t_a
+endtype
+local q = new t_a list

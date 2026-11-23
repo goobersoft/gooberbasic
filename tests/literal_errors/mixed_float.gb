@@ -1,0 +1,2 @@
+' expect: can't take a float
+local a = [1, 2.5]

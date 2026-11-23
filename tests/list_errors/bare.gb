@@ -1,0 +1,2 @@
+' expect: Say what the list holds
+local q:list = new list<int>

@@ -1,0 +1,2 @@
+' expect: List types are written list<int> now
+local q:int list

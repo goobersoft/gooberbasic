@@ -10,7 +10,7 @@ function make_a:t_a(n:int)
     return a
 endfunction
 
-function dump(l:t_a list)
+function dump(l:list<t_a>)
     local out:string = ""
     for local a:t_a = eachin l
         out :+ a.n + " "
@@ -18,7 +18,7 @@ function dump(l:t_a list)
     print("[" + trim(out) + "] count=" + count(l))
 endfunction
 
-local l:t_a list = new t_a list
+local l:list<t_a> = new list<t_a>
 for local i:int = 1 to 6
     add_last(l, make_a(i))
 next
@@ -52,7 +52,7 @@ next
 print("seen=" + seen + " empty=" + is_empty(l))
 
 ' lists of values; remove and contains compare by value
-local q:int list = new int list
+local q:list<int> = new list<int>
 add_first(q, 10)
 add_last(q, 20)
 add_last(q, 30)
@@ -62,14 +62,14 @@ local s:string = ""
 for local n:int = eachin q : s :+ n + " " : next
 print("ints: " + s + "contains 20: " + contains(q, 20))
 
-local f:float list = new float list
+local f:list<float> = new list<float>
 add_last(f, 1)         ' an int is fine in a float list
 add_last(f, 2.5)
 s = ""
 for local x:float = eachin f : s :+ x + " " : next
 print("floats: " + s)
 
-local words:string list = new string list
+local words:list<string> = new list<string>
 add_last(words, "goober")
 add_last(words, "")    ' the empty string is a value too
 add_last(words, "basic")
@@ -80,25 +80,25 @@ print("strings: " + s + " count=" + count(words))
 
 ' a list in a field, and an array of lists
 type t_bag
-    field items:string list
+    field items:list<string>
 endtype
 local bag:t_bag = new t_bag
-bag.items = new string list
+bag.items = new list<string>
 add_last(bag.items, "key")
 print("bag: " + count(bag.items))
-local rows:int list[2]
-rows[1] = new int list
+local rows:list<int>[2]
+rows[1] = new list<int>
 add_last(rows[1], 5)
 print("rows[1]: " + count(rows[1]))
 
 
 ' first / last / remove_first / remove_last give back the element's own type
-local d:int list = new int list
+local d:list<int> = new list<int>
 for local i:int = 1 to 5 : add_last(d, i * 10) : next
 print("first=" + first(d) + " last=" + last(d))
 local took:int = remove_first(d) + remove_last(d)
 print("took=" + took + " count=" + count(d))
-local m:t_a list = new t_a list
+local m:list<t_a> = new list<t_a>
 add_last(m, make_a(7))
 print("first .n=" + first(m).n)
 
@@ -107,7 +107,7 @@ print("contains 30: " + contains(d, 30) + " contains 99: " + contains(d, 99))
 print("remove 30: " + remove(d, 30) + " remove 99: " + remove(d, 99))
 
 ' insert clamps: below 1 goes first, past the end goes last
-local p:string list = new string list
+local p:list<string> = new list<string>
 insert(p, 1, "b")       ' into an empty list
 insert(p, -5, "a")
 insert(p, 99, "d")
@@ -117,11 +117,37 @@ s = ""
 for local w:string = eachin p : s :+ w : next
 print("insert: " + s + " count=" + count(p))
 
+' count(list, value) counts the matching items: by value, or the same object
+local c:list<int> = new list<int>
+add_last(c, 2) : add_last(c, 5) : add_last(c, 2) : add_last(c, 2)
+local cw:list<string> = new list<string>
+add_last(cw, "a") : add_last(cw, "b") : add_last(cw, "a")
+print("count 2s: " + count(c, 2) + " 9s: " + count(c, 9) + " all: " + count(c) + " a: " + count(cw, "a"))
+local seven:t_a = first(m)
+add_last(m, make_a(7))      ' another 7, but a different object
+print("count same object: " + count(m, seven) + " of " + count(m))
+
 ' a variable may still be called count, first or last
 local count:int = 3
 local last:string = "z"
 print("vars: " + count + last + " list count=" + count(p))
 
-local nothing:t_a list
+' list<...> syntax: a '>' right before '=' still closes the type, function
+' types go inside, a function can return a list, and list is still a usable name
+local tight:list<int>= new list<int>()
+add_last(tight, 1)
+local ops:list<int(int)> = new list<int(int)>
+add_last(ops, function:int(n:int)
+    return n + 100
+endfunction)
+function evens:list<int>(upto:int)
+    local r:list<int> = new list<int>
+    for local i:int = 2 to upto step 2 : add_last(r, i) : next
+    return r
+endfunction
+local list:int = 5
+if list >= 5 and list<=5 then print("syntax: " + first(tight) + " " + first(ops)(1) + " " + count(evens(9)))
+
+local nothing:list<t_a>
 for local a:t_a = eachin nothing
 next

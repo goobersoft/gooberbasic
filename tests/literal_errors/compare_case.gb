@@ -1,0 +1,6 @@
+' expect: Comparing with a list literal is always false
+local q:int<> = <>
+select q
+case <>
+    print("empty")
+endselect

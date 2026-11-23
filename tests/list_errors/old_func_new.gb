@@ -1,0 +1,2 @@
+' expect: A list of functions is written new list<(string)>
+local f = new (string) list

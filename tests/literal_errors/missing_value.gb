@@ -1,0 +1,2 @@
+' expect: Expected a value before ','
+local a:int[] = [1, , 2]

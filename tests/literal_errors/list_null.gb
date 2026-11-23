@@ -1,0 +1,4 @@
+' expect: a list cannot hold null
+type t_a
+endtype
+local l:list<t_a> = <null>

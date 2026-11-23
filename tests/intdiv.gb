@@ -1,0 +1,10 @@
+const K = 7 \ 2
+const KF = 7.9 \ 2
+print(K + " " + KF)
+a = 17 : b = 5
+print((a \ b) + " " + (-a \ b) + " " + (7.5 \ 2) + " " + (-7.5 \ 2) + " " + (10 \ 2.5))
+f# = 9.9
+x = f# \ 3
+print(x + 1)
+print(6 \ 4 * 3)
+print("a\b")

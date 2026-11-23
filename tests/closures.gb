@@ -67,7 +67,7 @@ local twice:int(int) = double_it
 print(twice(21))
 
 ' loops share the variable
-local fl:int() list = new int() list
+local fl:list<int()> = new list<int()>
 for local i:int = 1 to 3
     add_last(fl, function:int()
         return i
@@ -112,7 +112,7 @@ endfunction
 print(k(4)())
 
 ' lists and arrays of void functions, called as statements
-local handlers:(int) list = new (int) list
+local handlers:list<(int)> = new list<(int)>
 add_last(handlers, function(n:int)
     print("first " + n)
 endfunction)

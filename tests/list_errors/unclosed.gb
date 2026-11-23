@@ -1,0 +1,2 @@
+' expect: Expected '>' to end the list type
+local q:list<int = 3

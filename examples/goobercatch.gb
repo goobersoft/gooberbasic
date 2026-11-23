@@ -20,8 +20,8 @@ global bucket_x:float = W / 2
 global score:int, lives:int, best:int
 global spawn_timer:int, difficulty:float
 global game_over:int
-global drops:t_drop list = new t_drop list    ' objects live as long as something refers to them
-global sparks:t_spark list = new t_spark list
+global drops:list<t_drop> = new list<t_drop>    ' objects live as long as something refers to them
+global sparks:list<t_spark> = new list<t_spark>
 
 function reset_game()
     clear(drops)

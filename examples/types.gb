@@ -22,7 +22,7 @@ function describe:string(m:t_monster)
     return m.name + " (hp " + m.hp + ", speed " + m.speed + ")"
 endfunction
 
-local monsters:t_monster list = new t_monster list
+local monsters:list<t_monster> = new list<t_monster>
 add_last(monsters, spawn_monster("Blob", 10))
 add_last(monsters, spawn_monster("Goober", 25, 2.5))
 add_last(monsters, spawn_monster("Slime", 3, 0.5))

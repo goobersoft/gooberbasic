@@ -101,7 +101,7 @@ Every built-in name follows this style, so old Blitz spellings like `DrawRect` o
 | String | `$` | `:string` | `""` |
 | User type | | `:t_name` | `null` |
 | Array | | `:int[]`, `:float[,]`, ... | `null` |
-| List | | `:int list`, `:t_enemy list`, ... | `null` |
+| List | | `:list<int>`, `:list<t_enemy>`, ... (`:int<>` for short) | `null` |
 
 ```basic
 local count = 0            ' int by default
@@ -187,7 +187,7 @@ local d:double = 0.1       ' 64-bit
 |---|---|
 | `^` | power (always `float`) |
 | unary `-` `+` `~` | `~` is bitwise NOT |
-| `*` `/` `mod` `shl` `shr` `sar` | `int / int` stays an `int` (`7 / 2 = 3`) |
+| `*` `/` `\` `mod` `shl` `shr` `sar` | `int / int` stays an `int` (`7 / 2 = 3`); `\` is integer division for floats too (`7.5 \ 2 = 3`) |
 | `+` `-` | `+` joins strings; a number joined to a string becomes text |
 | `&` `\|` `~` | bitwise AND, OR, XOR |
 | `=` `<>` `<` `>` `<=` `>=` | give 1 or 0; strings compare alphabetically |
@@ -282,7 +282,7 @@ log("hello")
   Its parameters can't have default values.
 - A function variable starts as `null`; compare with `f = null`. Calling a null function
   is a runtime error.
-- Lists and arrays of functions work as usual: `local handlers:(int) list = new (int) list`,
+- Lists and arrays of functions work as usual: `local handlers:list<(int)> = new list<(int)>`,
   `local steps:int(int)[4]`. Fields too: `field on_hit:(t_enemy)`.
 
 **Closures.** A function value can use the local variables of the function it's written
@@ -360,7 +360,7 @@ endtype
 e:t_enemy = new t_enemy
 e.x = 100 : e.hp = 3
 
-global enemies:t_enemy list = new t_enemy list
+global enemies:list<t_enemy> = new list<t_enemy>
 add_last(enemies, e)
 
 for e:t_enemy = eachin enemies                ' visit every t_enemy in the list, in order
@@ -385,15 +385,15 @@ replacement if you use one of them. (`first` and `last` now work on a list: see 
 
 ## Lists
 
-A list holds values of **one type**, written before the word `list`: `int list`,
-`float list`, `string list`, or a list of one of your types such as `t_enemy list`.
-Create one with `new`:
+A list holds values of **one type**, written inside `list<...>`: `list<int>`,
+`list<float>`, `list<string>`, a list of one of your types such as `list<t_enemy>`, or a
+list of functions such as `list<int(int)>`. Create one with `new`:
 
 ```basic
-local q:int list = new int list
+local q:list<int> = new list<int>
 add_first(q, 10)
 add_last(q, 20)
-add_last(q, "some string")          ' compile error: cannot put a string into an int list
+add_last(q, "some string")          ' compile error: cannot put a string into a list<int>
 
 for local n:int = eachin q          ' visits 10, then 20
     print(n)
@@ -401,12 +401,17 @@ next
 ```
 
 - Putting a value of the wrong type into a list is a **compile error**. The one
-  exception is an `int` going into a `float list`, which converts it.
+  exception is an `int` going into a `list<float>`, which converts it.
 - The `eachin` loop variable must have the list's element type. Without `strict`, an
   undeclared loop variable gets that type automatically: `for n = eachin q`.
 - Lists can't hold `null`, or other lists. A field or an array can hold a list:
-  `field items:string list`, `local rows:int list[4]`.
-- A list variable starts as `null`; give it a list with `new int list` before using it.
+  `field items:list<string>`, `local rows:list<int>[4]`.
+- A list variable starts as `null`; give it a list with `new list<int>` before using it,
+  or a list literal: `local q:list<int> = <10, 20, 30>` (see below).
+- `int<>` is short for `list<int>`, in types and after `new`: `local q:int<> = new int<>`.
+- A function can take or return a list: `function evens:list<int>(upto:int)`.
+- The old way of writing list types, `int list` and `new t_enemy list`, is a compile error
+  that shows the new spelling.
 
 | Command | What it does |
 |---|---|
@@ -416,7 +421,7 @@ next
 | `remove_first(list)` · `remove_last(list)` | take the first / last item out and return it |
 | `remove(list, value)` | take out the first matching item; returns its position, or 0 if none matched |
 | `contains(list, value)` | the position of the first matching item, or 0, so it works in an `if` |
-| `count(list)` | how many items there are |
+| `count(list)` · `count(list, value)` | how many items there are / how many match `value` |
 | `is_empty(list)` | 1 if there are none |
 | `clear(list)` | take every item out |
 
@@ -424,10 +429,10 @@ next
 (`first(enemies).hp` works) and are a runtime error on an empty list, so check
 `is_empty` first when the list might be empty.
 
-`remove` and `contains` compare by value for `int`, `float` and `string` lists, and by
-identity (the same object) for object lists. Both search the list, so they take longer on
-long lists. The other commands take the same time however long the list is, except
-`insert`, which walks to position `n`.
+`remove`, `contains` and `count(list, value)` compare by value for `int`, `float` and
+`string` lists, and by identity (the same object) for object lists. They search the list,
+so they take longer on long lists. The other commands, `count(list)` included, take the
+same time however long the list is, except `insert`, which walks to position `n`.
 
 These names are only commands when you call them: a variable or function of your own
 called `count`, `first` or `last` still works. The old names (`list_add_last`,
@@ -449,6 +454,32 @@ local names:string[]           ' an array variable with no array yet (null)
 
 Arrays are zero-based and bounds-checked. They can hold any type, including objects.
 `local a:int[n]` creates a fresh array each time it runs.
+
+## Array and list literals
+
+```basic
+local q:int[] = [1, 2, 3, 4, 5]         ' a new one-dimensional array
+local p:list<int> = <1, 2, 3, 4, 5>     ' a new list
+local w:int<> = <1, 2, 3, 4, 5>         ' the same: int<> is list<int>
+local level:int[] = [                   ' a literal may span lines
+    1, 1, 1,
+    1, 0, 1
+]
+```
+
+- Each one makes a new array or list every time it runs; the values are any expressions.
+- Where the type is known (a declaration, an assignment, an argument, a return value),
+  the values convert to it as an assignment would: `local f:float[] = [1, 2]` holds floats,
+  and lists follow the usual list rule (an int may go into a float list, not the reverse).
+- Elsewhere the first value decides the type: `["a", "b"]` is a `string[]`, and
+  `[1, 2.5]` is an error (write `1.0`, or give it a type).
+- `[]` and `<>` are empty ones, where the type is known: `local e:int[] = []`.
+- Inside `< >` a `>` comparison ends the list, so put comparisons in brackets: `<(a > b)>`.
+- `=` and `<>` ask whether two arrays or lists are the same one, and a literal is always a
+  new one, so `if q = <> then` would always be false: it's a compile error. Test for no
+  items with `is_empty(q)` or `len(a) = 0`.
+- Array literals are one-dimensional; arrays can't hold arrays, and lists can't hold
+  `null`, lists or arrays. An array of lists is fine: `local g:int<>[] = [<1>, <2, 3>]`.
 
 ## Data blocks
 

@@ -1,0 +1,2 @@
+' expect: can't start with null
+local a = [null]

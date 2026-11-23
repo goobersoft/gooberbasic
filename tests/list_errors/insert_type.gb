@@ -1,3 +1,3 @@
-' expect: insert: cannot put a string into an int list
-local q:int list = new int list
+' expect: insert: cannot put a string into a list<int>
+local q:list<int> = new list<int>
 insert(q, 1, "x")

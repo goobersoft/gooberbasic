@@ -1,0 +1,2 @@
+' expect: makes a one-dimensional array
+local a:int[,] = [1, 2]

@@ -59,7 +59,7 @@
     "prefix": "list",
     "description": "Declare a typed list",
     "body": [
-      "${1:local} ${2:items}:${3:int} list = new ${3:int} list"
+      "${1:local} ${2:items}:list<${3:int}> = new list<${3:int}>"
     ]
   },
   "While loop": {

@@ -136,7 +136,7 @@ px.r = 300
 px.id = -1
 print("field byte = " + px.r + ", field long = " + px.id)
 
-local q:short list = new short list
+local q:list<short> = new list<short>
 add_last(q, 70000)
 add_last(q, 5)
 for local e:short = eachin q

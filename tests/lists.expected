@@ -14,5 +14,8 @@ first .n=7
 contains 30: 2 contains 99: 0
 remove 30: 2 remove 99: 0
 insert: axbcd count=5
+count 2s: 3 9s: 0 all: 4 a: 2
+count same object: 1 of 2
 vars: 3z list count=5
-tests/lists.gb:126: runtime error: eachin: the list is null
+syntax: 1 101 4
+tests/lists.gb:152: runtime error: eachin: the list is null

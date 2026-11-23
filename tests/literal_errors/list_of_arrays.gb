@@ -1,0 +1,2 @@
+' expect: Lists of arrays are not supported
+local l = <[1]>

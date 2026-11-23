@@ -1,0 +1,101 @@
+' array literals [a, b, c] and list literals <a, b, c>
+strict
+type t_p
+    field n:int
+endtype
+
+function mk:t_p(n:int)
+    local p:t_p = new t_p
+    p.n = n
+    return p
+endfunction
+
+function join_a:string(a:int[])
+    local out:string = ""
+    for local i:int = 0 to len(a) - 1
+        out :+ a[i] + " "
+    next
+    return "[" + trim(out) + "] len=" + len(a)
+endfunction
+
+function join_l:string(l:list<int>)
+    local out:string = ""
+    for local n:int = eachin l
+        out :+ n + " "
+    next
+    return "<" + trim(out) + "> count=" + count(l)
+endfunction
+
+function evens:int[]()
+    return [2, 4, 6]
+endfunction
+
+function sum_floats:float(a:float[])
+    local s:float = 0
+    for local i:int = 0 to len(a) - 1
+        s :+ a[i]
+    next
+    return s
+endfunction
+
+' the examples from the request
+local q:int[] = [1,2,3,4,5]
+local p:list<int> = <1,2,3,4,5>
+local w2:int<> = <1,2,3,4,5>
+print(join_a(q))
+print(join_l(p))
+print(join_l(w2))
+
+' the wanted type converts the values
+local f:float[] = [1, 2, 3.5]
+print(f[0] + " " + f[2])
+local fl:float<> = <1, 2.5>
+print(first(fl) + " " + last(fl))
+local b:byte[] = [1, 255, 256]
+print(b[1] + " " + b[2])
+
+' with no wanted type, the first value decides
+local s$ = "x"
+for local w:string = eachin <"a", "b" + s$, str(3)>
+    print(w)
+next
+print(len(["one", "two"]))
+print([10, 20, 30][1])
+
+' empty literals take their type from where they go
+local e:int[] = []
+local el:list<string> = <>
+print(len(e) + " " + count(el))
+
+' as arguments, return values, assignments and expressions inside
+print(join_a(evens()))
+print(sum_floats([1, 2, 3]))
+print(join_l(<q[0] * 10, len(q), (3 > 2), -1>))
+q = [7]
+print(join_a(q))
+local k:int = 3
+print(join_a([k, k * k, k ^ 3, max(k, 9)]))
+
+' objects, and arrays of lists
+local ps:t_p[] = [mk(1), mk(2), null]
+print(ps[1].n + " " + (ps[2] = null))
+local objs:list<t_p> = <mk(5), mk(6)>
+print(first(objs).n + last(objs).n)
+local grid:list<int>[] = [<1>, <2, 3>, new int<>]
+print(count(grid[0]) + " " + count(grid[1]) + " " + count(grid[2]))
+
+' a table over several lines
+local table:int[] = [
+    1, 2, 3,
+    4, 5, 6   ' comments are fine
+]
+print(join_a(table))
+local names:list<string> = <
+    "ann",
+    "bob"
+>
+print(count(names))
+
+' comparisons still work around them
+local lt:int = 1 < 2
+print(lt + " " + (2 <> 3) + " " + (4 > 3))

@@ -140,17 +140,26 @@ grammar = {
             {"match": r"(?i)\b(end\s*(?:function|type))\b",
              "captures": {"1": {"name": "storage.type.end.gooberbasic"}}},
         ]},
-        # `:int`, `:t_enemy`, `:float list`, `:string[]` and `new int list`
+        # `:int`, `:t_enemy`, `:list<float>`, `:string[]`, `new t_enemy` and `new list<int>`
         "annotations": {"patterns": [
             # written with no spaces (`x:int`), which tells it apart from the `:` statement separator
-            {"match": r"(?i)(?<=[A-Za-z0-9_%#$])(:)(" + TYPE + r")(?:\s+(list)\b)?(?![A-Za-z0-9_])",
+            {"match": r"(?i)(?<=[A-Za-z0-9_%#$])(:)(?:(list)\s*(<)\s*(" + TYPE + r")?|(" + TYPE + r"))(?![A-Za-z0-9_])",
              "captures": {"1": {"name": "punctuation.separator.type.gooberbasic"},
-                          "2": {"name": "storage.type.gooberbasic"},
-                          "3": {"name": "storage.type.list.gooberbasic"}}},
-            {"match": r"(?i)\b(new)\s+(" + TYPE + r")(?:\s+(list)\b)?",
+                          "2": {"name": "storage.type.list.gooberbasic"},
+                          "3": {"name": "punctuation.definition.list.gooberbasic"},
+                          "4": {"name": "storage.type.gooberbasic"},
+                          "5": {"name": "storage.type.gooberbasic"}}},
+            {"match": r"(?i)\b(new)\s+(?:(list)\s*(<)\s*(" + TYPE + r")?|(" + TYPE + r"))",
              "captures": {"1": {"name": "keyword.other.new.gooberbasic"},
-                          "2": {"name": "storage.type.gooberbasic"},
-                          "3": {"name": "storage.type.list.gooberbasic"}}},
+                          "2": {"name": "storage.type.list.gooberbasic"},
+                          "3": {"name": "punctuation.definition.list.gooberbasic"},
+                          "4": {"name": "storage.type.gooberbasic"},
+                          "5": {"name": "storage.type.gooberbasic"}}},
+            # the element type of a list<...> anywhere else: function parameters, list<int(int)>
+            {"match": r"(?i)\b(list)\s*(<)\s*(" + TYPE + r")",
+             "captures": {"1": {"name": "storage.type.list.gooberbasic"},
+                          "2": {"name": "punctuation.definition.list.gooberbasic"},
+                          "3": {"name": "storage.type.gooberbasic"}}},
         ]},
         "keywords": {"patterns": [
             {"name": "keyword.control.gooberbasic",
@@ -197,7 +206,7 @@ grammar = {
             {"name": "keyword.operator.assignment.compound.gooberbasic", "match": r":[+\-*/]"},
             {"name": "keyword.operator.comparison.gooberbasic", "match": r"<>|<=|>=|<|>"},
             {"name": "keyword.operator.assignment.gooberbasic", "match": r"="},
-            {"name": "keyword.operator.arithmetic.gooberbasic", "match": r"[-+*/^]"},
+            {"name": "keyword.operator.arithmetic.gooberbasic", "match": r"[-+*/\\^]"},
             {"name": "keyword.operator.bitwise.gooberbasic", "match": r"[&|~]"},
             {"name": "punctuation.separator.statement.gooberbasic", "match": r"[:;]"},
             {"name": "punctuation.separator.comma.gooberbasic", "match": r","},

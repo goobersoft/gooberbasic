@@ -8,9 +8,10 @@ typedef enum {
     T_LONGLIT,       /* integer literal too big for an int: lval, ival = 1 if only unsigned fits */
 
     T_LPAREN, T_RPAREN, T_LBRACK, T_RBRACK, T_COMMA, T_DOT, T_COLON,
-    T_PLUS, T_MINUS, T_STAR, T_SLASH, T_CARET, T_AMP, T_PIPE, T_TILDE,
+    T_PLUS, T_MINUS, T_STAR, T_SLASH, T_BACKSLASH, T_CARET, T_AMP, T_PIPE, T_TILDE,
     T_EQ, T_NE, T_LT, T_GT, T_LE, T_GE,
     T_ADD_ASSIGN, T_SUB_ASSIGN, T_MUL_ASSIGN, T_DIV_ASSIGN,
+    T_LIST_OPEN, T_LIST_CLOSE,   /* the < > of a list literal: <1, 2, 3> */
 
     /* keywords */
     T_IF, T_THEN, T_ELSE, T_ELSEIF, T_ENDIF,

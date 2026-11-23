@@ -131,30 +131,56 @@
     "annotations": {
       "patterns": [
         {
-          "match": "(?i)(?<=[A-Za-z0-9_%#$])(:)((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*))(?:\\s+(list)\\b)?(?![A-Za-z0-9_])",
+          "match": "(?i)(?<=[A-Za-z0-9_%#$])(:)(?:(list)\\s*(<)\\s*((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*))?|((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*)))(?![A-Za-z0-9_])",
           "captures": {
             "1": {
               "name": "punctuation.separator.type.gooberbasic"
             },
             "2": {
-              "name": "storage.type.gooberbasic"
+              "name": "storage.type.list.gooberbasic"
             },
             "3": {
-              "name": "storage.type.list.gooberbasic"
+              "name": "punctuation.definition.list.gooberbasic"
+            },
+            "4": {
+              "name": "storage.type.gooberbasic"
+            },
+            "5": {
+              "name": "storage.type.gooberbasic"
             }
           }
         },
         {
-          "match": "(?i)\\b(new)\\s+((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*))(?:\\s+(list)\\b)?",
+          "match": "(?i)\\b(new)\\s+(?:(list)\\s*(<)\\s*((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*))?|((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*)))",
           "captures": {
             "1": {
               "name": "keyword.other.new.gooberbasic"
             },
             "2": {
-              "name": "storage.type.gooberbasic"
+              "name": "storage.type.list.gooberbasic"
             },
             "3": {
+              "name": "punctuation.definition.list.gooberbasic"
+            },
+            "4": {
+              "name": "storage.type.gooberbasic"
+            },
+            "5": {
+              "name": "storage.type.gooberbasic"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(list)\\s*(<)\\s*((?:double|sint16|sint32|sint64|string|uint16|uint32|uint64|float|short|sint8|uint8|byte|long|int|[A-Za-z_][A-Za-z0-9_]*))",
+          "captures": {
+            "1": {
               "name": "storage.type.list.gooberbasic"
+            },
+            "2": {
+              "name": "punctuation.definition.list.gooberbasic"
+            },
+            "3": {
+              "name": "storage.type.gooberbasic"
             }
           }
         }
@@ -293,7 +319,7 @@
         },
         {
           "name": "keyword.operator.arithmetic.gooberbasic",
-          "match": "[-+*/^]"
+          "match": "[-+*/\\\\^]"
         },
         {
           "name": "keyword.operator.bitwise.gooberbasic",

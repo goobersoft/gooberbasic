@@ -16,7 +16,7 @@ type t_player
   field hp:int, x:float
 endtype
 
-players:t_player list = new t_player list
+players:list<t_player> = new list<t_player>
 for n = 1 to 3
   p:t_player = new t_player
   p.name = "P" + n

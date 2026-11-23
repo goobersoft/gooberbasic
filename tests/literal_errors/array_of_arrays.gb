@@ -1,0 +1,2 @@
+' expect: An array can't hold arrays
+local a = [[1]]

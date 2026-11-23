@@ -1,0 +1,3 @@
+' expect: ']' to end the array
+local a:int[] = [1, 2
+print(a[0])

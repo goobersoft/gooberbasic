@@ -17,7 +17,24 @@ typedef struct {
     const char *path;
     TokenList *out;
     Program *prog;
+    /* The brackets open on this line, innermost last: '(' and '[' as usual,
+     * 'a' an array literal's '[', 't' a list type's '<' (list<int>) and 'l' a
+     * list literal's '<'. A '>' closes the innermost '<' only when nothing
+     * opened since is still open, and stays alone (list<int>= is '>' '='). */
+    char open[64];
+    int nopen;
 } Lexer;
+
+static char open_top(Lexer *L) { return L->nopen ? L->open[L->nopen - 1] : 0; }
+static void open_push(Lexer *L, char k) { if (L->nopen < (int)sizeof L->open) L->open[L->nopen++] = k; }
+static void open_pop(Lexer *L, const char *kinds) { if (L->nopen && strchr(kinds, open_top(L))) L->nopen--; }
+
+/* Inside an array or list literal a line may end without ending the statement,
+ * so long tables can be written one row per line. */
+static bool in_literal(Lexer *L) {
+    for (int i = 0; i < L->nopen; i++) if (L->open[i] == 'a' || L->open[i] == 'l') return true;
+    return false;
+}
 
 static struct { const char *word; TokType type; } keywords[] = {
     {"if", T_IF}, {"then", T_THEN}, {"else", T_ELSE}, {"elseif", T_ELSEIF},
@@ -40,11 +57,11 @@ static const char *tok_names[T__COUNT] = {
     [T_INTLIT] = "integer", [T_FLOATLIT] = "float", [T_STRLIT] = "string", [T_LONGLIT] = "integer",
     [T_LPAREN] = "'('", [T_RPAREN] = "')'", [T_LBRACK] = "'['", [T_RBRACK] = "']'",
     [T_COMMA] = "','", [T_DOT] = "'.'", [T_COLON] = "':'", [T_PLUS] = "'+'",
-    [T_MINUS] = "'-'", [T_STAR] = "'*'", [T_SLASH] = "'/'", [T_CARET] = "'^'",
+    [T_MINUS] = "'-'", [T_STAR] = "'*'", [T_SLASH] = "'/'", [T_BACKSLASH] = "'\\'", [T_CARET] = "'^'",
     [T_AMP] = "'&'", [T_PIPE] = "'|'", [T_TILDE] = "'~'", [T_EQ] = "'='",
     [T_NE] = "'<>'", [T_LT] = "'<'", [T_GT] = "'>'", [T_LE] = "'<='", [T_GE] = "'>='",
     [T_ADD_ASSIGN] = "':+'", [T_SUB_ASSIGN] = "':-'", [T_MUL_ASSIGN] = "':*'",
-    [T_DIV_ASSIGN] = "':/'",
+    [T_DIV_ASSIGN] = "':/'", [T_LIST_OPEN] = "'<'", [T_LIST_CLOSE] = "'>'",
     [T_IF] = "if", [T_THEN] = "then", [T_ELSE] = "else", [T_ELSEIF] = "elseif",
     [T_ENDIF] = "endif", [T_WHILE] = "while", [T_WEND] = "wend", [T_REPEAT] = "repeat",
     [T_UNTIL] = "until", [T_FOREVER] = "forever", [T_FOR] = "for", [T_TO] = "to",
@@ -86,6 +103,18 @@ static Token *push_tok(Lexer *L, TokType type) {
 static TokType last_type(Lexer *L) {
     if (L->out->count == 0) return T_NEWLINE;
     return L->out->toks[L->out->count - 1].type;
+}
+
+/* Does the token just made end a value? If not, a '[' or '<' here starts a
+ * value of its own (an array or list literal) instead of indexing or comparing. */
+static bool after_value(Lexer *L) {
+    switch (last_type(L)) {
+        case T_IDENT: case T_INTLIT: case T_LONGLIT: case T_FLOATLIT: case T_STRLIT:
+        case T_RPAREN: case T_RBRACK: case T_GT: case T_LIST_CLOSE: case T_NULL:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static bool is_ident_start(int c) { return isalpha(c) || c == '_'; }
@@ -275,9 +304,11 @@ static void lex_source(Lexer *L) {
         if (c == 0) break;
         if (c == ' ' || c == '\t' || c == '\r') { L->p++; continue; }
         if (c == '\n') {
-            if (last_type(L) != T_NEWLINE) push_tok(L, T_NEWLINE);
             L->p++;
             L->line++;
+            if (in_literal(L)) continue;
+            if (last_type(L) != T_NEWLINE) push_tok(L, T_NEWLINE);
+            L->nopen = 0;       /* an unclosed bracket is the parser's error to report */
             continue;
         }
         if (c == '\'') { while (*L->p && *L->p != '\n') L->p++; continue; }
@@ -347,10 +378,10 @@ static void lex_source(Lexer *L) {
         }
         L->p++;
         switch (c) {
-            case '(': push_tok(L, T_LPAREN); break;
-            case ')': push_tok(L, T_RPAREN); break;
-            case '[': push_tok(L, T_LBRACK); break;
-            case ']': push_tok(L, T_RBRACK); break;
+            case '(': push_tok(L, T_LPAREN); open_push(L, '('); break;
+            case ')': push_tok(L, T_RPAREN); open_pop(L, "("); break;
+            case '[': open_push(L, after_value(L) ? '[' : 'a'); push_tok(L, T_LBRACK); break;
+            case ']': push_tok(L, T_RBRACK); open_pop(L, "[a"); break;
             case ',': push_tok(L, T_COMMA); break;
             case '.': push_tok(L, T_DOT); break;
             case ':':
@@ -365,23 +396,34 @@ static void lex_source(Lexer *L) {
             case '-': push_tok(L, T_MINUS); break;
             case '*': push_tok(L, T_STAR); break;
             case '/': push_tok(L, T_SLASH); break;
+            case '\\': push_tok(L, T_BACKSLASH); break;   /* integer division */
             case '^': push_tok(L, T_CARET); break;
             case '&': push_tok(L, T_AMP); break;
             case '|': push_tok(L, T_PIPE); break;
             case '~': push_tok(L, T_TILDE); break;
-            case '=':
-                if (*L->p == '<') { L->p++; push_tok(L, T_LE); }
-                else if (*L->p == '>') { L->p++; push_tok(L, T_GE); }
-                else push_tok(L, T_EQ);
-                break;
-            case '<':
+            case '=': push_tok(L, T_EQ); break;
+            case '<': {
+                /* list<int>, list<(string)>: a type follows, so this opens a list type */
+                const char *q = L->p;
+                while (*q == ' ' || *q == '\t') q++;
+                Token *prev = L->out->count ? &L->out->toks[L->out->count - 1] : NULL;
+                if (prev && prev->type == T_IDENT && !strcmp(prev->lower, "list") && !prev->suffix &&
+                    (is_ident_start((unsigned char)*q) || *q == '(')) {
+                    push_tok(L, T_LT);
+                    open_push(L, 't');
+                    break;
+                }
+                /* <1, 2, 3> where a value goes: a list literal (<> alone is an empty one) */
+                if (!after_value(L)) { open_push(L, 'l'); push_tok(L, T_LIST_OPEN); break; }
                 if (*L->p == '>') { L->p++; push_tok(L, T_NE); }
                 else if (*L->p == '=') { L->p++; push_tok(L, T_LE); }
                 else push_tok(L, T_LT);
                 break;
+            }
             case '>':
-                if (*L->p == '=') { L->p++; push_tok(L, T_GE); }
-                else if (*L->p == '<') { L->p++; push_tok(L, T_NE); }
+                if (open_top(L) == 't') { L->nopen--; push_tok(L, T_GT); }
+                else if (open_top(L) == 'l') { L->nopen--; push_tok(L, T_LIST_CLOSE); }
+                else if (*L->p == '=') { L->p++; push_tok(L, T_GE); }
                 else push_tok(L, T_GT);
                 break;
             default: {

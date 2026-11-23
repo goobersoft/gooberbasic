@@ -91,6 +91,10 @@ static struct {
     /* constant folding (see fold()) */
     int starts[4], nstarts;   /* offsets of the most recent instructions */
     int barrier;              /* highest offset a jump may target: never fold across it */
+    /* the type wanted by the expression that starts at token wantPos - 1 (0: none);
+     * an array or list literal standing there takes its element type from it */
+    VType want;
+    int wantPos;
 } C;
 
 static VType expr(void);
@@ -611,7 +615,7 @@ static const char *type_str(VType t) {
             VType e = vt(t.elem);
             e.tid = t.tid;
             e.num = t.num;
-            snprintf(lbuf, sizeof lbuf, "%s list", type_str(e));
+            snprintf(lbuf, sizeof lbuf, "list<%s>", type_str(e));
             base = lbuf;
             break;
         }
@@ -687,7 +691,7 @@ static int find_type(const char *lname) {
 }
 
 static bool is_type_name(const char *l) {
-    if (num_type_find(l) || !strcmp(l, "string")) return true;
+    if (num_type_find(l) || !strcmp(l, "string") || !strcmp(l, "list")) return true;
     return find_type(l) >= 0;
 }
 
@@ -696,7 +700,7 @@ static bool is_type_name(const char *l) {
 static const char *const LIST_FNS[] = {
     "add_first", "add_last", "remove", "contains",     /* (list, value) */
     "insert",                                          /* (list, position, value) */
-    "count", "is_empty", "clear",                      /* (list) */
+    "count", "is_empty", "clear",                      /* (list); count also (list, value) */
     "first", "last", "remove_first", "remove_last",    /* (list) -> an element */
     NULL
 };
@@ -729,23 +733,61 @@ static bool is_old_tlist(const char *lower) { return !strcmp(lower, "t_list") ||
 
 static void old_tlist_error(Token *t) __attribute__((noreturn));
 static void old_tlist_error(Token *t) {
-    cerror_at(t, "'%s' was replaced by typed lists. Put the element type before 'list', "
-                 "e.g. local enemies:t_enemy list = new t_enemy list", t->text);
+    cerror_at(t, "'%s' was replaced by typed lists. Put the element type inside list<...>, "
+                 "e.g. local enemies:list<t_enemy> = new list<t_enemy>", t->text);
 }
 
 static bool at_list_word(void) { return pt() == T_IDENT && !strcmp(peek()->lower, "list"); }
 
-/* A type name (already consumed) optionally followed by `list`. */
-static VType parse_type(Token *tn) {
-    VType t = resolve_type_name(tn);
-    if (!at_list_word()) return t;
+/* `int list` is how list types used to be written, before list<int> */
+static void old_list_syntax(Token *at, VType elem) __attribute__((noreturn));
+static void old_list_syntax(Token *at, VType elem) {
+    cerror_at(at, "List types are written list<%s> now, e.g. local q:list<int> = new list<int>", type_str(elem));
+}
+
+static VType parse_type_tail(VType t, bool header);
+static void coerce(VType from, VType to, const char *ctx);
+static VType list_of(VType e);
+static VType expr_want(const VType *want);
+
+/* list<T>, after the word `list`: T is any type but a list or an array,
+ * function types included (list<int(int)>, list<(string)>). */
+static VType parse_list_type(Token *tn) {
+    if (pt() != T_LT)
+        cerror_at(tn, "Say what the list holds: list<int>, list<string>, list<t_enemy>");
     advance();
-    if (at_list_word()) cerror_at(peek(), "Lists of lists are not supported");
+    VType e;
+    if (pt() == T_LPAREN) e = parse_type_tail(vt(K_VOID), false);
+    else {
+        Token *en = expect(T_IDENT, "the type the list holds, e.g. list<int>");
+        if (!strcmp(en->lower, "list")) cerror_at(en, "Lists of lists are not supported");
+        if (is_old_tlist(en->lower)) old_tlist_error(en);
+        if (!is_type_name(en->lower)) unknown_name(en, "type");
+        e = parse_type_tail(resolve_type_name(en), false);
+    }
+    if (pt() == T_LBRACK || e.dims)
+        cerror_at(peek(), "Lists of arrays are not supported (an array of lists is: list<int>[4])");
+    if (pt() != T_GT) cerror_at(peek(), "Expected '>' to end the list type, e.g. list<%s>", type_str(e));
+    advance();
+    return list_of(e);
+}
+
+/* A type name, already consumed: int, t_foo, list<...>. */
+static VType list_of(VType e) {
     VType l = vt(K_LIST);
-    l.elem = t.base;
-    l.num = t.num;
-    l.tid = t.tid;
+    l.elem = is_func(e) ? K_FUNC : e.base;
+    l.num = is_func(e) ? NT_NONE : e.num;
+    l.tid = e.tid;
     return l;
+}
+
+/* A type name, already consumed: int, t_foo, list<...>, and int<> for list<int>. */
+static VType parse_type(Token *tn) {
+    if (!strcmp(tn->lower, "list")) return parse_list_type(tn);
+    VType t = resolve_type_name(tn);
+    if (at_list_word()) old_list_syntax(peek(), t);
+    if (pt() == T_NE) { advance(); return list_of(t); }
+    return t;
 }
 
 static VType list_elem(VType l) {
@@ -753,6 +795,19 @@ static VType list_elem(VType l) {
     e.tid = l.tid;
     e.num = l.num;
     return e;
+}
+
+/* The checks for putting value `v` (its code just emitted) into list type `lt`,
+ * converting it on the way: any number goes into a number list (wrapped or
+ * rounded to its element type), except that a float can't silently go into an
+ * integer list. `fn` names what is putting it in, for the errors. */
+static void list_value(Token *at, VType v, VType lt, const char *fn) {
+    VType e = list_elem(lt);
+    if (v.base == K_NULL && !v.dims) cerror_at(at, "%s: a list cannot hold null", fn);
+    if (is_num(e) && is_num(v) && !(is_intk(e.base) && v.base == K_FLOAT)) coerce(v, e, fn);
+    else if (!vt_eq(v, e))
+        cerror_at(at, "%s: cannot put %s %s into a %s", fn,
+                  v.base == K_INT || v.base == K_OBJ ? "an" : "a", type_str(v), type_str(lt));
 }
 
 static VType suffix_type(char s) {
@@ -787,19 +842,12 @@ static int last_group_start_end(int pos, int *endOut) {
 }
 static int last_group_start(int pos) { return last_group_start_end(pos, NULL); }
 
-/* `t list`, when `t` is a function type: int(int) list */
+/* `int(int) list` was a list of functions before list<int(int)> */
 static VType func_list_tail(VType t) {
-    if (!is_func(t) || !at_list_word()) return t;
-    advance();
-    if (at_list_word()) cerror_at(peek(), "Lists of lists are not supported");
-    VType l = vt(K_LIST);
-    l.elem = K_FUNC;
-    l.num = NT_NONE;
-    l.tid = t.tid;
-    return l;
+    if (is_func(t) && at_list_word()) old_list_syntax(peek(), t);
+    return t;
 }
 
-static VType parse_type_tail(VType t, bool header);
 static int parse_empty_dims(void);
 static void call_chain_statement(VType t, bool called);
 
@@ -1505,10 +1553,18 @@ static ConstVal cx_mul(void) {
     ConstVal a = cx_unary();
     for (;;) {
         TokType op = pt();
-        if (op != T_STAR && op != T_SLASH && op != T_MOD && op != T_SHL && op != T_SHR && op != T_CARET) return a;
+        if (op != T_STAR && op != T_SLASH && op != T_BACKSLASH && op != T_MOD && op != T_SHL && op != T_SHR && op != T_CARET) return a;
         advance();
         ConstVal b = cx_unary();
         if (a.t.base == K_STRING || b.t.base == K_STRING) cerror("Invalid string operation in constant");
+        if (op == T_BACKSLASH) {
+            if (a.t.base == K_FLOAT || b.t.base == K_FLOAT) {
+                if (cx_f(b) == 0) cerror("Division by zero in constant");
+                a = cnum_i(fold_f2i(cx_f(a) / cx_f(b)));
+                continue;
+            }
+            op = T_SLASH;
+        }
         if (op == T_CARET) { a = cnum_f(pow(cx_f(a), cx_f(b))); continue; }
         if (cx_wide(a) || cx_wide(b)) {
             if (a.t.base == K_FLOAT || b.t.base == K_FLOAT) {
@@ -1659,6 +1715,15 @@ static VType arith(TokType op, VType lt, VType rt) {
     if (!is_num(lt) || !is_num(rt))
         cerror("Operator needs numbers (got %s and %s)", type_str(lt), type_str(rt));
     VType r = unify_num(lt, rt, op == T_CARET);
+    if (op == T_BACKSLASH) {
+        /* integer division: integers divide as '/' does; floats divide, then truncate to an int */
+        if (r.base != K_FLOAT) op = T_SLASH;
+        else {
+            emit_op(OP_DIVF);
+            emit_op(OP_F2I);
+            return vt(K_INT);
+        }
+    }
     if (r.base == K_FLOAT) {
         switch (op) {
             case T_PLUS: emit_op(OP_ADDF); break;
@@ -1754,7 +1819,7 @@ static VType call_user(FuncSym *f, bool parens) {
             if (n >= f->nparams) cerror("Too many arguments for %s (it takes %d)", f->name, f->nparams);
             char ctx[160];
             snprintf(ctx, sizeof ctx, "Argument %d of %s", n + 1, f->name);
-            VType at = expr();
+            VType at = expr_want(&f->ptypes[n]);
             coerce(at, f->ptypes[n], ctx);
             n++;
         } while (match(T_COMMA));
@@ -1765,7 +1830,7 @@ static VType call_user(FuncSym *f, bool parens) {
         int save = C.pos;
         int32_t saveLine = C.lastLine;
         C.pos = f->pdefault[n];
-        VType at = expr();
+        VType at = expr_want(&f->ptypes[n]);
         coerce(at, f->ptypes[n], "default argument");
         C.pos = save;
         C.lastLine = saveLine;
@@ -1834,7 +1899,7 @@ static void old_list_fn_check(Token *id) {
 }
 
 /* add_first / add_last / remove / contains (list, value), insert (list, position, value),
- * count / is_empty / clear / first / last / remove_first / remove_last (list).
+ * count(list) or count(list, value), is_empty / clear / first / last / remove_first / remove_last (list).
  * The value must have the list's element type; an int may go into a float list. */
 static VType list_call(Token *id, int which, bool parens) {
     const char *fn = LIST_FNS[which];
@@ -1852,20 +1917,12 @@ static VType list_call(Token *id, int which, bool parens) {
         coerce(p, vt(K_INT), fn);
         argc = 2;
     }
-    if (which <= LF_INSERT) {
+    /* count(list) counts every item, count(list, value) the matching ones */
+    if (which <= LF_INSERT || (which == LF_COUNT && pt() == T_COMMA)) {
         expect(T_COMMA, "','");
         Token *vtok = peek();
         VType v = expr();
-        VType e = list_elem(lt);
-        if (v.base == K_NULL && !v.dims)
-            cerror_at(vtok, "%s: a list cannot hold null", fn);
-        /* any number goes into a number list (wrapped/rounded to its element
-         * type), except that a float cannot silently go into an integer list */
-        if (is_num(e) && is_num(v) && !(is_intk(e.base) && v.base == K_FLOAT)) coerce(v, e, fn);
-        else if (!vt_eq(v, e))
-            cerror_at(vtok, "%s: cannot put %s %s into %s %s", fn,
-                      v.base == K_INT || v.base == K_OBJ ? "an" : "a", type_str(v),
-                      lt.elem == K_INT || lt.elem == K_OBJ ? "an" : "a", type_str(lt));
+        list_value(vtok, v, lt, fn);
         argc++;
     }
     if (parens) expect(T_RPAREN, "')'");
@@ -1886,7 +1943,7 @@ static bool intrinsic(Token *id, VType *out) {
         cerror_at(id, "%s was removed: types no longer keep a list of every instance. "
                       "Keep objects in a list and loop with for x:t_foo = eachin list", id->text);
     if (!strcmp(n, "create_list"))
-        cerror_at(id, "create_list was replaced by typed lists, e.g. new int list or new t_enemy list");
+        cerror_at(id, "create_list was replaced by typed lists, e.g. new list<int> or new list<t_enemy>");
     old_list_fn_check(id);
     int li = list_fn_index(n);
     if (li >= 0) {
@@ -1978,7 +2035,7 @@ static VType call_value(VType ft) {
             char ctx[200];
             snprintf(ctx, sizeof ctx, "Argument %d of %s", n + 1, type_str(ft));
             VType want = sg->params[n];
-            VType at = expr();
+            VType at = expr_want(&want);
             coerce(at, want, ctx);
             n++;
         } while (match(T_COMMA));
@@ -2101,6 +2158,128 @@ static VType primary_ident(void) {
     return r.type;
 }
 
+/* expr(), telling a literal that starts it what type is wanted (NULL: nothing is) */
+static VType expr_want(const VType *want) {
+    VType saveWant = C.want;
+    int savePos = C.wantPos;
+    if (want) { C.want = *want; C.wantPos = C.pos + 1; }
+    else C.wantPos = 0;
+    VType r = expr();
+    C.want = saveWant;
+    C.wantPos = savePos;
+    return r;
+}
+
+/* The type wanted for a literal at the current token, if one is. */
+static bool wanted_here(VType *out) {
+    if (C.wantPos != C.pos + 1) return false;
+    *out = C.want;
+    return true;
+}
+
+/* A literal with nothing to say its type takes it from its first value. */
+static VType first_value_type(Token *at, VType v, const char *what) {
+    if (v.base == K_NULL && !v.dims)
+        cerror_at(at, "%s can't start with null: give it a type, e.g. local a:t_foo%s = ...", what,
+                  what[0] == 'A' ? "[]" : "<>");
+    if (v.base == K_VOID && !v.dims) cerror_at(at, "%s: this does not return a value", what);
+    v.lit = 0;
+    return v;
+}
+
+static void need_literal_value(void) {
+    TokType t = pt();
+    if (t == T_COMMA || t == T_RBRACK || t == T_LIST_CLOSE) cerror("Expected a value before %s", tok_desc(peek()));
+}
+
+/* [a, b, c]: a new one-dimensional array holding the values, in order.
+ * Where a type is wanted (local q:float[] = [1, 2]) the values are converted
+ * to its elements as an assignment would; otherwise the first value decides. */
+static VType array_literal(void) {
+    VType want = vt(K_VOID), elem = vt(K_INT);
+    bool hinted = wanted_here(&want);
+    Token *open = advance();
+    bool known = false;
+    if (hinted && want.dims) {
+        if (want.dims > 1)
+            cerror_at(open, "[ ... ] makes a one-dimensional array, not %s; use dim and fill it", type_str(want));
+        elem = want;
+        elem.dims = 0;
+        known = true;
+    }
+    /* the size and element kind are patched in once the values are read */
+    emit_op1(OP_PUSH_INT, 0);
+    int sizeAt = C.prog->count - 4;
+    emit_op2(OP_NEWARR, 0, 1);
+    int kindAt = C.prog->count - 8;
+    here();
+    int32_t n = 0;
+    if (pt() != T_RBRACK) {
+        do {
+            need_literal_value();
+            emit_op1(OP_DUPN, 1);
+            emit_op1(OP_PUSH_INT, n);
+            Token *at = peek();
+            VType v = expr_want(known ? &elem : NULL);
+            if (!known) {
+                elem = first_value_type(at, v, "An array literal");
+                if (elem.dims) cerror_at(at, "An array can't hold arrays (an array has as many dimensions as you like: dim a:int[4, 4])");
+                known = true;
+            } else if (!want.dims && is_intk(elem.base) && is_num(elem) && v.base == K_FLOAT)
+                cerror_at(at, "This array holds %ss (from its first value), so it can't take a float: "
+                              "write the first one as 1.0, or give it a type: local a:float[] = [...]", type_str(elem));
+            char ctx[48];
+            snprintf(ctx, sizeof ctx, "Item %d of the array", n + 1);
+            coerce(v, elem, ctx);
+            emit_op1(OP_ASET, 1);
+            n++;
+        } while (match(T_COMMA));
+    }
+    expect(T_RBRACK, "']' to end the array");
+    if (!known) cerror_at(open, "An empty [] needs a type to come from, e.g. local a:int[] = []");
+    int32_t kind = runtime_kind(elem);
+    memcpy(C.prog->code + sizeAt, &n, 4);
+    memcpy(C.prog->code + kindAt, &kind, 4);
+    here();
+    VType r = elem;
+    r.dims = 1;
+    return r;
+}
+
+/* <a, b, c>: a new list holding the values, in order. Its element type comes
+ * from where it goes (local p:list<float> = <1, 2>) or else its first value. */
+static VType list_literal(void) {
+    VType want, lt = vt(K_LIST);
+    bool hinted = wanted_here(&want);
+    Token *open = advance();
+    bool known = false;
+    if (hinted && want.base == K_LIST && !want.dims) { lt = want; known = true; }
+    emit_op2(OP_NATIVE, native_or_die("__list_new"), 0);
+    int addLast = native_or_die("__add_last");
+    if (pt() != T_LIST_CLOSE) {
+        do {
+            need_literal_value();
+            emit_op1(OP_DUPN, 1);
+            Token *at = peek();
+            VType e = list_elem(lt);
+            VType v = expr_want(known ? &e : NULL);
+            if (!known) {
+                VType f = first_value_type(at, v, "A list literal");
+                if (f.dims) cerror_at(at, "Lists of arrays are not supported (an array of lists is: list<int>[4])");
+                if (f.base == K_LIST) cerror_at(at, "Lists of lists are not supported");
+                lt = list_of(f);
+                known = true;
+            }
+            list_value(at, v, lt, "A list literal");
+            emit_op2(OP_NATIVE, addLast, 2);
+            emit_op(OP_POP);
+        } while (match(T_COMMA));
+    }
+    expect(T_LIST_CLOSE, "'>' to end the list");
+    if (!known) cerror_at(open, "An empty <> needs a type to come from, e.g. local q:list<int> = <>");
+    return lt;
+}
+
 static VType expr_primary(void) {
     Token *t = peek();
     switch (t->type) {
@@ -2117,30 +2296,23 @@ static VType expr_primary(void) {
         case T_NULL: advance(); emit_op1(OP_PUSH_DEFAULT, K_OBJ); return vt(K_NULL);
         case T_NEW: {
             advance();
-            /* new int(int) list, new (string) list: a list of function values */
-            int chainEnd;
-            int from = pt() == T_LPAREN ? C.pos : C.pos + 1;
-            if ((pt() == T_LPAREN || (pt() == T_IDENT && is_type_name(peek()->lower))) &&
-                C.tl->toks[from].type == T_LPAREN && last_group_start_end(from, &chainEnd) >= 0 &&
-                C.tl->toks[chainEnd].type == T_IDENT && !strcmp(C.tl->toks[chainEnd].lower, "list")) {
-                VType ft = pt() == T_LPAREN ? parse_type_tail(vt(K_VOID), false) : parse_type_tail(parse_type(advance()), false);
-                VType lt = func_list_tail(ft);
-                if (pt() == T_LPAREN && peekn(1)->type == T_RPAREN) { advance(); advance(); }
-                emit_op2(OP_NATIVE, native_or_die("__list_new"), 0);
-                return lt;
-            }
+            if (pt() == T_LPAREN)
+                cerror("A list of functions is written new list<(string)> or new list<int(int)>");
             Token *tn = expect(T_IDENT, "a type name after new");
             if (is_old_tlist(tn->lower)) old_tlist_error(tn);
-            if (at_list_word()) {
+            if (!strcmp(tn->lower, "list") || (pt() == T_NE && is_type_name(tn->lower))) {     /* new list<int>, new int<> */
                 VType lt = parse_type(tn);
                 if (pt() == T_LPAREN && peekn(1)->type == T_RPAREN) { advance(); advance(); }
                 emit_op2(OP_NATIVE, native_or_die("__list_new"), 0);
                 return lt;
             }
-            if (is_type_name(tn->lower) && find_type(tn->lower) < 0)
-                cerror_at(tn, "new makes objects and lists: new t_foo or new %s list", tn->lower);
+            if (is_type_name(tn->lower) && find_type(tn->lower) < 0) {
+                if (at_list_word() || pt() == T_LPAREN) old_list_syntax(tn, resolve_type_name(tn));
+                cerror_at(tn, "new makes objects and lists: new t_foo or new list<%s>", tn->lower);
+            }
             int tid = find_type(tn->lower);
             if (tid < 0) unknown_name(tn, "type");
+            if (at_list_word()) old_list_syntax(tn, parse_type(tn));
             if (pt() == T_LPAREN && peekn(1)->type == T_RPAREN) { advance(); advance(); }
             emit_op1(OP_NEW, tid);
             VType r = vt(K_OBJ);
@@ -2149,6 +2321,8 @@ static VType expr_primary(void) {
         }
         case T_IDENT: return primary_ident();
         case T_FUNCTION: return function_value();
+        case T_LBRACK: return array_literal();
+        case T_LIST_OPEN: return list_literal();
         default:
             cerror("Expected an expression but found %s", tok_desc(t));
     }
@@ -2234,7 +2408,7 @@ static VType expr_mul(void) {
     VType a = expr_unary();
     for (;;) {
         TokType op = pt();
-        if (op != T_STAR && op != T_SLASH && op != T_MOD && op != T_SHL && op != T_SHR && op != T_SAR) return a;
+        if (op != T_STAR && op != T_SLASH && op != T_BACKSLASH && op != T_MOD && op != T_SHL && op != T_SHR && op != T_SAR) return a;
         advance();
         VType b = expr_unary();
         a = arith(op, a, b);
@@ -2263,14 +2437,43 @@ static VType expr_bit(void) {
     }
 }
 
+/* = and <> on arrays and lists ask whether both sides are the same one, and a
+ * literal is always a new one, so comparing with it can only be false. */
+static void literal_compare_check(Token *start, VType v) {
+    if (!start || (start->type != T_LBRACK && start->type != T_LIST_OPEN)) return;
+    if (v.base == K_LIST && !v.dims)
+        cerror_at(start, "Comparing with a list literal is always false: = asks whether two lists are the same list, "
+                         "and < ... > makes a new one. To test for no items use is_empty(q); to test items use contains or count");
+    if (v.dims)
+        cerror_at(start, "Comparing with an array literal is always false: = asks whether two arrays are the same array, "
+                         "and [ ... ] makes a new one. Compare the items one by one, or test for none with len(a) = 0");
+}
+
+/* the right side of a comparison, which may be a literal of the left side's type: q = <> */
+static VType compare_operand(VType other, VType (*parse)(void)) {
+    VType saveWant = C.want;
+    int savePos = C.wantPos;
+    C.want = other;
+    C.wantPos = C.pos + 1;
+    Token *start = peek();
+    VType r = parse();
+    C.want = saveWant;
+    C.wantPos = savePos;
+    literal_compare_check(start, r);
+    return r;
+}
+
 static VType expr_cmp(void) {
+    Token *start = peek();
     VType a = expr_bit();
     for (;;) {
         TokType op = pt();
         if (op != T_EQ && op != T_NE && op != T_LT && op != T_GT && op != T_LE && op != T_GE) return a;
+        literal_compare_check(start, a);
         advance();
-        VType b = expr_bit();
+        VType b = compare_operand(a, expr_bit);
         a = compare(op, a, b);
+        start = NULL;
     }
 }
 
@@ -2404,7 +2607,7 @@ static void decl_statement(bool global, bool isDim) {
                 t.dims = (uint8_t)d;
                 declare_target(name, t, global, &ref);
                 if (match(T_EQ)) {
-                    VType et = expr();
+                    VType et = expr_want(&t);
                     coerce(et, t, "Assignment");
                 } else emit_op1(OP_PUSH_DEFAULT, K_ARRAY);
                 emit_store_var(&ref);
@@ -2429,7 +2632,7 @@ static void decl_statement(bool global, bool isDim) {
         if (isDim) cerror_at(name, "dim needs a size, e.g. dim %s[10]", name->text);
         declare_target(name, t, global, &ref);
         if (match(T_EQ)) {
-            VType et = expr();
+            VType et = expr_want(&t);
             coerce(et, t, "Assignment");
         } else emit_op1(OP_PUSH_DEFAULT, runtime_kind(t));
         emit_store_var(&ref);
@@ -2470,7 +2673,7 @@ static void assignment(Token *id, VarRef ref) {
     TokType op = pt();
     if (op == T_EQ) {
         advance();
-        VType et = expr();
+        VType et = expr_want(&lv.type);
         coerce(et, lv.type, "Assignment");
         emit_lval_store(&lv);
         return;
@@ -2797,7 +3000,7 @@ static void select_statement(Token *selTok) {
             IntList body = {0};
             do {
                 emit_op1(OP_LOAD_LOCAL, slot);
-                VType vt2 = expr();
+                VType vt2 = compare_operand(st, expr);
                 compare(T_EQ, st, vt2);
                 il_push(&body, emit_jump(OP_JT));
             } while (match(T_COMMA));
@@ -2890,7 +3093,7 @@ static void return_statement(void) {
         cerror("%s has no return type, so it returns nothing: give it one to return a value, "
                "e.g. function %s:int() (superstrict)", fd->name, fd->name);
     else {
-        VType t = expr();
+        VType t = expr_want(&fd->ret);
         coerce(t, fd->ret, "return value");
     }
     emit_op(OP_RET);
@@ -3012,8 +3215,8 @@ static void skip_initializer(void) {
         TokType t = pt();
         if (t == T_EOF || t == T_NEWLINE) return;
         if (depth == 0 && (t == T_COMMA || t == T_COLON)) return;
-        if (t == T_LPAREN || t == T_LBRACK) depth++;
-        if (t == T_RPAREN || t == T_RBRACK) depth--;
+        if (t == T_LPAREN || t == T_LBRACK || t == T_LIST_OPEN) depth++;
+        if (t == T_RPAREN || t == T_RBRACK || t == T_LIST_CLOSE) depth--;
         advance();
     }
 }
@@ -3096,8 +3299,8 @@ static void parse_signature(Token *name, bool isValue, Sig *out) {
                 int depth = 0;
                 while (!(depth == 0 && (pt() == T_COMMA || pt() == T_RPAREN))) {
                     if (pt() == T_NEWLINE || pt() == T_EOF) cerror("Missing ')' in function header");
-                    if (pt() == T_LPAREN) depth++;
-                    if (pt() == T_RPAREN) depth--;
+                    if (pt() == T_LPAREN || pt() == T_LBRACK || pt() == T_LIST_OPEN) depth++;
+                    if (pt() == T_RPAREN || pt() == T_RBRACK || pt() == T_LIST_CLOSE) depth--;
                     advance();
                 }
             } else if (n > 0 && pdef[n - 1] >= 0) {

@@ -7,7 +7,7 @@ type t_ball
     field red, green, blue
 endtype
 
-global balls:t_ball list = new t_ball list
+global balls:list<t_ball> = new list<t_ball>
 
 function add_ball(x#, y#)
     local b:t_ball = new t_ball

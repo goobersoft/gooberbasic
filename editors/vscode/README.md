@@ -2,7 +2,7 @@
 
 Syntax highlighting, auto-indent and snippets for GooberBASIC (`.gb`) programs.
 
-- Keywords, types (`int`, `t_enemy`, `float list`), built-in commands, `KEY_*` constants,
+- Keywords, types (`int`, `t_enemy`, `list<float>`), built-in commands, `KEY_*` constants,
   numbers (`$FF`, `%1010`, `2.5e-3`), strings with `~n`-style escapes, `'` comments and
   `rem` … `endrem` blocks.
 - Mistakes are flagged as you type: unknown escapes like `~x`, and removed keywords

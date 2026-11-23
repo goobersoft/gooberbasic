@@ -1,0 +1,3 @@
+' expect: Comparing with a list literal is always false
+local q:int<> = <1>
+print(<1> <> q)

@@ -440,7 +440,14 @@ static Value n_contains(VM *vm, int argc, Value *args) {
     find_link(need_list(vm, args[0], "contains"), args[1], &pos);
     return v_int(pos);
 }
-static Value n_count(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "count")->count); }
+/* count(list): every item; count(list, value): the items that match value */
+static Value n_count(VM *vm, int argc, Value *args) {
+    ObjList *l = need_list(vm, args[0], "count");
+    if (argc < 2) return v_int(l->count);
+    int n = 0;
+    for (ObjLink *k = l->head; k; k = k->next) n += values_equal(k->value, args[1]);
+    return v_int(n);
+}
 static Value n_is_empty(VM *vm, int argc, Value *args) { (void)argc; return v_int(need_list(vm, args[0], "is_empty")->count == 0); }
 static Value n_clear(VM *vm, int argc, Value *args) { (void)argc; list_clear(need_list(vm, args[0], "clear")); RET_VOID; }
 
@@ -621,10 +628,12 @@ static bool name_eq(const char *a, const char *lname) {
     return *a == 0 && *lname == 0;
 }
 
+/* the graphics table is searched first, so a platform can replace a core command
+ * (GooberEngine's print draws on its screen as well as writing to stdout) */
 int native_find(const char *lname) {
     count_natives();
-    for (int i = 0; i < ncore; i++) if (name_eq(gb_core_natives[i].name, lname)) return i;
     for (int i = 0; i < ngfx; i++) if (name_eq(gb_gfx_natives[i].name, lname)) return ncore + i;
+    for (int i = 0; i < ncore; i++) if (name_eq(gb_core_natives[i].name, lname)) return i;
     for (int i = 0; i < nnet; i++) if (name_eq(gb_net_natives[i].name, lname)) return ncore + ngfx + i;
     return -1;
 }

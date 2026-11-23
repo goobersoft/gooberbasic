@@ -1,0 +1,2 @@
+' expect: cannot put a double into a list<int>
+local q:list<int> = <1, 2.5>

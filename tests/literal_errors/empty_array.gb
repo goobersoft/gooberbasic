@@ -1,0 +1,2 @@
+' expect: An empty [] needs a type
+local a = []

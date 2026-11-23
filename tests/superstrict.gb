@@ -23,7 +23,7 @@ for local i:int = 1 to LIMIT
 next
 print(total)
 print(add(1) + add(1, 2))
-local l:t_thing list = new t_thing list
+local l:list<t_thing> = new list<t_thing>
 local t:t_thing = new t_thing
 t.name = "bob"
 add_last(l, t)
