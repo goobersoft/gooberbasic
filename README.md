@@ -634,7 +634,10 @@ Constants: `NET_TCP` (the default mode), `NET_UDP`; `net_status()` gives `NET_OF
 
 - The host owns the slots. Anyone may `net_set` one: your copy changes at once, and a client's change goes
   to the host, which passes it on to everyone. Only changed slots are sent.
-- Messages (1–255 characters) arrive in order, exactly once, on both TCP and UDP. The host relays them.
+- Messages (1–255 characters) arrive in order and are never repeated, on both TCP and UDP. The host relays them.
+  Up to 64 wait to go out to each player; when that is full `net_send` returns 0. Two cases lose one without
+  saying so: the inbox holds 256, and a new message pushes out the oldest (read them all each loop); and if
+  the host's queue to a player is full, that player misses a message relayed from another player.
 - Nothing blocks. The sockets are read and written when `flip()`, `delay()`, `net_update()`, `net_status()`
   or `net_recv()` run, so a program without a window should call `delay()` in its loop.
 - A connection that is silent for 5 seconds is dropped; joining gives up after 5 seconds. IPv4 only.
