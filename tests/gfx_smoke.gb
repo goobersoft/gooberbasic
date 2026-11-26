@@ -12,5 +12,5 @@ set_alpha(0.5) : set_color(255, 255, 255) : draw_circle(200, 170, 50) : set_alph
 set_color(255, 255, 255)
 draw_text("GooberBASIC " + graphics_width() + "x" + graphics_height(), 200, 260, true)
 for i = 0 to 99 : plot(20 + i * 3, 290) : next
-if save_screenshot(input()) then print("saved") else print("save failed")
+if save_screenshot(input()) then print("saved") else print("save failed") endif
 flip()

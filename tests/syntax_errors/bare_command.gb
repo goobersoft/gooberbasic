@@ -1,0 +1,2 @@
+' expect: Call cls with parentheses
+cls

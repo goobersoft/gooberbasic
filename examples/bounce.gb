@@ -28,15 +28,15 @@ for i = 1 to 1000
 next
 
 while not key_hit(KEY_ESCAPE)
-    if mouse_hit(MOUSE_LEFT) then add_ball(mouse_x(), mouse_y())
+    if mouse_hit(MOUSE_LEFT) then add_ball(mouse_x(), mouse_y()) endif
 
     cls()
     for b:t_ball = eachin balls
         b.dy = b.dy + 0.15             ' gravity
         b.x = b.x + b.dx
         b.y = b.y + b.dy
-        if b.x < b.r or b.x > WIDTH - b.r then b.dx = -b.dx : b.x = max(b.r, min(b.x, WIDTH - b.r))
-        if b.y > HEIGHT - b.r then b.dy = -b.dy * 0.9 : b.y = HEIGHT - b.r
+        if b.x < b.r or b.x > WIDTH - b.r then b.dx = -b.dx : b.x = max(b.r, min(b.x, WIDTH - b.r)) endif
+        if b.y > HEIGHT - b.r then b.dy = -b.dy * 0.9 : b.y = HEIGHT - b.r endif
         set_color(b.red, b.green, b.blue)
         draw_circle(b.x, b.y, b.r)
     next

@@ -50,13 +50,13 @@ print(read_int())
 read_int()
 
 defdata ENEMIES
-    "slime", 3, 0.5
+    "slime", 3, 0.5,
     "bat",   2, 1.25
 enddata
 
 defdata LEVEL_1
-    SIZE, 2
-    1, 0, 1
+    SIZE, 2,
+    1, 0, 1,
     0, 1, 0
 enddata
 
@@ -65,7 +65,7 @@ defdata EMPTY
 end data
 
 defdata MIXED
-    2.9, "1.5", -7, SIZE * 2
+    2.9, "1.5", -7, SIZE * 2,
     5000000000, ""
 enddata
 

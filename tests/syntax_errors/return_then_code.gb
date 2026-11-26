@@ -1,0 +1,6 @@
+' expect: f has no return type, so it returns nothing
+superstrict
+function f()
+    return
+    print("unreachable")
+endfunction

@@ -4,7 +4,7 @@
 #include "common.h"
 
 typedef enum {
-    T_EOF, T_NEWLINE, T_IDENT, T_INTLIT, T_FLOATLIT, T_STRLIT,
+    T_EOF, T_IDENT, T_INTLIT, T_FLOATLIT, T_STRLIT,
     T_LONGLIT,       /* integer literal too big for an int: lval, ival = 1 if only unsigned fits */
 
     T_LPAREN, T_RPAREN, T_LBRACK, T_RBRACK, T_COMMA, T_DOT, T_COLON,

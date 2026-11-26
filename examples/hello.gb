@@ -2,7 +2,7 @@
 print("Hello from GooberBASIC!")
 
 name$ = input("What's your name? ")
-if name$ = "" then name$ = "Goober"
+if name$ = "" then name$ = "Goober" endif
 print("Nice to meet you, " + name$ + "!")
 
 ' FizzBuzz, BASIC style

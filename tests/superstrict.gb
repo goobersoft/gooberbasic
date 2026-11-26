@@ -11,7 +11,7 @@ function add:int(a:int, b:int = 10)
 endfunction
 function tally(n:int)
     total :+ n
-    if n > 100 then return
+    if n > 100 then return endif
 endfunction
 function pair:int[]()
     local a:int[2]

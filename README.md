@@ -64,9 +64,12 @@ See its [README](editors/vscode/README.md) for installing it and running program
 
 - Keywords and names are **case-insensitive** (`print`, `Print` and `PRINT` are the same),
   but underscores count: `draw_rect` and `drawrect` are different names.
-- One statement per line, or several separated by `:` (or `;`).
-- Comments start with `'`. Block comments go between `rem` and `endrem`.
-- End a line with `..` to continue it on the next line.
+- Line ends are only whitespace, as in Lua: a statement ends where its grammar does, so
+  one can run over several lines and several can share a line (`x = 1 y = 2`). A `:`
+  (or `;`) between statements is allowed but never needed.
+- Every call takes parentheses, even with no arguments: `cls()`, `flip()`.
+- Comments start with `'` and run to the end of the line. Block comments go between
+  `rem` and `endrem`.
 - `include "other.gb"` pastes another file in place (each file is included only once).
   Everything is shared between files unless it's declared `local`; see [Files](#files).
 
@@ -202,8 +205,8 @@ String escapes: `~n` newline, `~t` tab, `~q` quote, `~~` tilde.
 ## Control flow
 
 ```basic
-if x > 10 then print("big")               ' single line
-if x > 10 then print("big") else print("small")
+if x > 10 then print("big") endif                         ' one line still needs endif
+if x > 10 then print("big") else print("small") endif
 
 if x > 10
     print("big")
@@ -215,7 +218,7 @@ endif                                     ' or end if
 
 while lives > 0 ... wend                   ' or endwhile
 repeat ... until done                      ' or ... forever
-for i = 1 to 10 step 2 ... next            ' step must be a constant
+for i = 1 to 10 step 2 ... next            ' step must be a constant; next takes no name
 for local i:int = 10 to 0 step -1 ... next
 
 select key
@@ -227,6 +230,10 @@ endselect
 
 `exit` leaves the innermost loop, `continue` skips to its next round.
 `end` stops the program.
+
+Every `if` ends with `endif`, and `then` is optional. A `return` with no value has to
+come last in its block (as in Lua), since anything after it that can be a value is
+taken as the value to return.
 
 ## Functions
 
@@ -364,7 +371,7 @@ global enemies:list<t_enemy> = new list<t_enemy>
 add_last(enemies, e)
 
 for e:t_enemy = eachin enemies                ' visit every t_enemy in the list, in order
-    if e.hp <= 0 then remove(enemies, e)      ' removing inside eachin is safe
+    if e.hp <= 0 then remove(enemies, e) endif      ' removing inside eachin is safe
 next
 
 clear(enemies)                                ' drop them all
@@ -497,18 +504,19 @@ for local y:int = 0 to h - 1
 next
 
 defdata LEVEL_1
-    4, 2                  ' width, height
-    1, 1, 1, 1
+    4, 2,                  ' width, height
+    1, 1, 1, 1,
     1, 0, 0, 1
 enddata
 
 defdata ENEMIES
-    "slime", 3, 0.5       ' name, hp, speed
+    "slime", 3, 0.5,       ' name, hp, speed
     "bat",   2, 1.25
 enddata
 ```
 
-- Items are separated by commas or line ends (several on a line take commas). Each
+- Items are separated by commas, across line ends too, so every row but the last ends
+  with one (`1, 2` then `-1` on the next line would otherwise be `2 - 1`). Each
   item is a number, a string or a constant expression (`-1`, `SIZE * 2`, `KEY_SPACE`).
 - A block can be written anywhere at the top level, above or below the code that reads it.
 - Each `read_*` converts the item the way an assignment would: `read_int()` of `2.9`
@@ -625,7 +633,7 @@ Constants: `NET_TCP` (the default mode), `NET_UDP`; `net_status()` gives `NET_OF
 - A connection that is silent for 5 seconds is dropped; joining gives up after 5 seconds. IPv4 only.
 
 ```
-if not net_host(4040) then print("can't host: " + net_error()) : end
+if not net_host(4040) then print("can't host: " + net_error()) end endif
 repeat
     net_set(0, net_get(0) + 1)                   ' everyone sees the count go up
     while net_messages() > 0 : print("player " + net_from() + ": " + net_recv()) : wend

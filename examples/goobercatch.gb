@@ -44,8 +44,8 @@ function burst(x:float, y:float, n:int)
 endfunction
 
 function update_game()
-    if key_down(KEY_LEFT) or key_down(KEY_A) then bucket_x :- 7
-    if key_down(KEY_RIGHT) or key_down(KEY_D) then bucket_x :+ 7
+    if key_down(KEY_LEFT) or key_down(KEY_A) then bucket_x :- 7 endif
+    if key_down(KEY_RIGHT) or key_down(KEY_D) then bucket_x :+ 7 endif
     bucket_x = max(BUCKET_W / 2, min(bucket_x, W - BUCKET_W / 2))
 
     spawn_timer :- 1
@@ -66,7 +66,7 @@ function update_game()
             if d.bad
                 lives :- 1
                 burst(d.x, d.y, 30)
-                if lives <= 0 then game_over = true : best = max(best, score)
+                if lives <= 0 then game_over = true : best = max(best, score) endif
             else
                 score :+ 10
                 burst(d.x, d.y, 8)
@@ -100,7 +100,7 @@ function draw_game()
         set_color(255, 230, 120)
         set_alpha(s.life / 40.0)
         draw_rect(s.x, s.y, 3, 3)
-        if s.life <= 0 then remove(sparks, s)
+        if s.life <= 0 then remove(sparks, s) endif
     next
     set_alpha(1)
     set_color(200, 160, 90)
@@ -126,7 +126,7 @@ reset_game()
 
 repeat
     if game_over
-        if key_hit(KEY_SPACE) then reset_game()
+        if key_hit(KEY_SPACE) then reset_game() endif
     else
         update_game()
     endif

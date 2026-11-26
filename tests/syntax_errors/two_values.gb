@@ -1,0 +1,2 @@
+' expect: Expected end of statement but found a number
+local x:int = 1 2

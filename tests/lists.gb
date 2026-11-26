@@ -27,18 +27,18 @@ dump(l)
 
 ' removing the current element inside eachin is safe
 for local a:t_a = eachin l
-    if a.n mod 2 = 1 then remove(l, a)
+    if a.n mod 2 = 1 then remove(l, a) endif
 next
 dump(l)
 
 ' removing an element ahead of the loop skips it
 local four:t_a
 for local a:t_a = eachin l
-    if a.n = 4 then four = a
+    if a.n = 4 then four = a endif
 next
 for local a:t_a = eachin l
     write(a.n + " ")
-    if a.n = 2 then remove(l, four)
+    if a.n = 2 then remove(l, four) endif
 next
 print("")
 print("contains four: " + contains(l, four))
@@ -146,7 +146,7 @@ function evens:list<int>(upto:int)
     return r
 endfunction
 local list:int = 5
-if list >= 5 and list<=5 then print("syntax: " + first(tight) + " " + first(ops)(1) + " " + count(evens(9)))
+if list >= 5 and list<=5 then print("syntax: " + first(tight) + " " + first(ops)(1) + " " + count(evens(9))) endif
 
 local nothing:list<t_a>
 for local a:t_a = eachin nothing

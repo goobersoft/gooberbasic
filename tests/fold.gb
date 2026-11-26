@@ -3,7 +3,7 @@
 ' (the same numbers through variables), which must match.
 function check(name$, folded$, runtime$)
     local mark$ = "ok"
-    if folded$ <> runtime$ then mark$ = "MISMATCH"
+    if folded$ <> runtime$ then mark$ = "MISMATCH" endif
     print(name$ + ": " + folded$ + " / " + runtime$ + " " + mark$)
 endfunction
 

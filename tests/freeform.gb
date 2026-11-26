@@ -1,0 +1,59 @@
+' line ends are only whitespace: statements end where their grammar does
+strict
+
+' several statements on one line, with no ':' between them
+local a:int = 1 local b:int = 2 print(a + b)
+
+' one statement split over lines
+local total:int =
+    a +
+    b *
+    10
+print(total)
+
+' declarations the prescan has to skip past, each followed by another statement
+global g1:int = 5 global g2:int = g1 * 2
+global words:list<string> = new list<string> global nums:list<int> = new int<>
+global double:int(int) = function:int(x:int) return x * 2 endfunction global g3:int = 7
+print(g1 + g2 + g3) print(double(21))
+add_last(words, "hi") add_last(nums, 3)
+print(first(words) + " " + str(first(nums)))
+
+' every if ends with endif, even on one line
+if a = 1 then print("one") endif
+if a = 2 then print("two") else print("not two") endif
+if a = 2 then print("two") elseif a = 1 then print("one again") else print("none") endif
+if a = 1 if b = 2 print("no then needed") endif endif
+
+' a bare return just before the end of its block
+function check:int(n:int)
+    if n > 100 then return endif
+    return n + 1
+endfunction
+print(check(5)) print(check(500))
+
+function shout(s:string) print(s + "!") endfunction shout("hey")
+
+' loops and select, on one line or spread out
+for local i:int = 1 to 3 print(i) next
+local n:int = 0 while n < 3 n :+ 1 wend print(n)
+repeat n :- 1 until n = 0 print(n)
+select b case 1 print("b is 1") case 2, 3 print("b is 2 or 3") default print("other") endselect
+
+' function headers and calls across lines
+function add3:int(
+    x:int,
+    y:int,
+    z:int
+)
+    return x + y + z
+endfunction
+print(add3(
+    1,
+    2,
+    3))
+
+' defdata: items need commas, line ends or not
+defdata D 1, 2,
+    3 enddata
+restore(D) print(read_int() + read_int() + read_int())

@@ -36,7 +36,7 @@ next
 ' Remove the weak ones while iterating - this is safe in GooberBASIC.
 ' Once removed, nothing refers to them and the GC frees them.
 for local m:t_monster = eachin monsters
-    if m.hp < 15 then remove(monsters, m)
+    if m.hp < 15 then remove(monsters, m) endif
 next
 
 print("Survivors:")

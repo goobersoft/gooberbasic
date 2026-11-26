@@ -152,10 +152,33 @@ static Token *expect(TokType t, const char *what) {
     return advance();
 }
 
-static bool is_end_tok(TokType t) {
-    return t == T_NEWLINE || t == T_COLON || t == T_EOF || t == T_ELSE || t == T_ELSEIF;
+/* Line ends mean nothing, so a statement ends where its grammar does. These
+ * say what may come next. Can `t` begin an expression? */
+static bool starts_expr(TokType t) {
+    switch (t) {
+        case T_IDENT: case T_INTLIT: case T_LONGLIT: case T_FLOATLIT: case T_STRLIT:
+        case T_LPAREN: case T_LBRACK: case T_LIST_OPEN: case T_MINUS: case T_PLUS: case T_TILDE:
+        case T_NOT: case T_NEW: case T_NULL: case T_FUNCTION:
+            return true;
+        default:
+            return false;
+    }
 }
-static bool at_stmt_end(void) { return is_end_tok(pt()); }
+/* Does `t`, after a value, carry its expression on (a binary operator, '.', '[', '(')? */
+static bool continues_expr(TokType t) {
+    switch (t) {
+        case T_PLUS: case T_MINUS: case T_STAR: case T_SLASH: case T_BACKSLASH: case T_CARET:
+        case T_AMP: case T_PIPE: case T_TILDE: case T_EQ: case T_NE: case T_LT: case T_GT: case T_LE: case T_GE:
+        case T_AND: case T_OR: case T_MOD: case T_SHL: case T_SHR: case T_SAR:
+        case T_DOT: case T_LBRACK: case T_LPAREN:
+            return true;
+        default:
+            return false;
+    }
+}
+/* No value follows here: `return` alone returns nothing (as in Lua, a bare
+ * return has to end its block, since a value after it would be its own). */
+static bool at_stmt_end(void) { return !starts_expr(pt()); }
 
 /* ------------------------------------------------------------------ */
 /* emission                                                            */
@@ -1815,8 +1838,7 @@ static VType call_user(FuncSym *f, bool parens) {
     if (!parens) need_parens(f->name);
     expect(T_LPAREN, "'('");
     int n = 0;
-    bool empty = parens ? pt() == T_RPAREN : at_stmt_end();
-    if (!empty) {
+    if (pt() != T_RPAREN) {
         do {
             if (n >= f->nparams) cerror("Too many arguments for %s (it takes %d)", f->name, f->nparams);
             char ctx[160];
@@ -1861,8 +1883,7 @@ static VType call_native(int idx, bool parens) {
         if (!opt) required++;
     }
     int n = 0;
-    bool empty = parens ? pt() == T_RPAREN : at_stmt_end();
-    if (!empty) {
+    if (pt() != T_RPAREN) {
         const char *q = p;
         do {
             while (*q == '|') q++;
@@ -2532,9 +2553,10 @@ static void cond_expr(void) {
 
 static void statement(void);
 
+/* After a statement: ':' or ';', or the next statement, which starts with a
+ * name or a keyword (block ends like endif and next are keywords too). */
 static void end_of_statement(void) {
-    if (pt() == T_NEWLINE || pt() == T_COLON) { advance(); return; }
-    if (pt() == T_EOF) return;
+    if (match(T_COLON) || pt() == T_EOF || pt() == T_IDENT || pt() >= T_IF) return;
     cerror("Expected end of statement but found %s", tok_desc(peek()));
 }
 
@@ -2551,25 +2573,11 @@ static void block(const TokType *stops, int nstops, Token *opener) {
         if (t == T_EOF)
             cerror_at(opener, "%s on line %d is never closed (expected %s)", tok_name(opener->type), opener->line,
                       tok_name(stops[0]));
-        if (t == T_NEWLINE || t == T_COLON) { advance(); continue; }
+        if (t == T_COLON) { advance(); continue; }
         statement();
         if (!in_stops(pt(), stops, nstops)) end_of_statement();
     }
     C.depth--;
-}
-
-/* statements on the rest of a single-line If, up to Else / ElseIf / end of line */
-static void line_statements(void) {
-    for (;;) {
-        TokType t = pt();
-        if (t == T_NEWLINE || t == T_EOF || t == T_ELSE || t == T_ELSEIF) return;
-        if (t == T_COLON) { advance(); continue; }
-        statement();
-        t = pt();
-        if (t == T_COLON) { advance(); continue; }
-        if (t == T_NEWLINE || t == T_EOF || t == T_ELSE || t == T_ELSEIF) return;
-        cerror("Expected end of statement but found %s", tok_desc(peek()));
-    }
 }
 
 static Loop *push_loop(void) {
@@ -2700,7 +2708,7 @@ static int matching_paren(int pos) {
         TokType t = C.tl->toks[i].type;
         if (t == T_LPAREN || t == T_LBRACK) depth++;
         else if (t == T_RPAREN || t == T_RBRACK) { if (--depth == 0) return i; }
-        else if (t == T_NEWLINE || t == T_EOF) return -1;
+        else if (t == T_EOF) return -1;
     }
     return -1;
 }
@@ -2734,7 +2742,7 @@ static void call_statement(Token *id) {
     else if (li >= 0) { list_call(id, li, parens); emit_op(OP_POP); }
     else { call_native(n, parens); emit_op(OP_POP); }
     /* print (a) + 1: the parentheses held only part of the arguments */
-    if (!at_stmt_end() && pt() != T_ELSE && pt() != T_ELSEIF)
+    if (continues_expr(pt()))
         cerror_at(id, "Call %s with parentheses around all of its arguments: %s(...)", id->text, id->text);
 }
 
@@ -2785,27 +2793,7 @@ static void ident_statement(void) {
 
 static void if_statement(Token *ifTok) {
     cond_expr();
-    match(T_THEN);
-    if (pt() != T_NEWLINE && pt() != T_EOF) {
-        /* single-line If */
-        int jf = emit_jump(OP_JF);
-        line_statements();
-        if (match(T_ELSE)) {
-            int je = emit_jump(OP_JMP);
-            patch_here(jf);
-            line_statements();
-            patch_here(je);
-        } else if (pt() == T_ELSEIF) {
-            Token *t = advance();
-            int je = emit_jump(OP_JMP);
-            patch_here(jf);
-            if_statement(t);
-            patch_here(je);
-        } else patch_here(jf);
-        /* allow a trailing EndIf on the same line */
-        match(T_ENDIF);
-        return;
-    }
+    match(T_THEN);   /* every If ends with endif, even on one line: if x then y = 1 endif */
     static const TokType stops[] = {T_ENDIF, T_ELSEIF, T_ELSE};
     IntList ends = {0};
     int jf = emit_jump(OP_JF);
@@ -2884,6 +2872,17 @@ static VarRef for_var(Token *name, bool isLocal, bool explicitT, VType t) {
     return global_ref(name, t);   /* no local: the counter is a global */
 }
 
+/* After a loop's next: old code wrote next i. A name standing alone is no
+ * statement (i = 0, i.x = 1 and i() are), so it can only be that. */
+static void next_name_check(void) {
+    if (pt() != T_IDENT) return;
+    TokType n = peekn(1)->type;
+    if (n == T_EQ || n == T_DOT || n == T_LBRACK || n == T_LPAREN || n == T_COLON || n == T_ADD_ASSIGN ||
+        n == T_SUB_ASSIGN || n == T_MUL_ASSIGN || n == T_DIV_ASSIGN)
+        return;
+    cerror("next takes no loop variable: write just next");
+}
+
 static void for_statement(Token *forTok) {
     bool isLocal = match(T_LOCAL);
     Token *name = expect(T_IDENT, "a loop variable");
@@ -2927,7 +2926,7 @@ static void for_statement(Token *forTok) {
         patch_here(jf);
         pop_loop(cont, here());
         expect(T_NEXT, "next");
-        if (pt() == T_IDENT) advance();
+        next_name_check();
         return;
     }
 
@@ -2981,7 +2980,7 @@ static void for_statement(Token *forTok) {
     patch_here(jf);
     pop_loop(cont, here());
     expect(T_NEXT, "next");
-    if (pt() == T_IDENT) advance();
+    next_name_check();
 }
 
 static void select_statement(Token *selTok) {
@@ -2989,7 +2988,7 @@ static void select_statement(Token *selTok) {
     if (st.base == K_VOID) cerror("select needs a value");
     int slot = hidden_local(st);
     emit_op1(OP_STORE_LOCAL, slot);
-    while (pt() == T_NEWLINE || pt() == T_COLON) advance();
+    while (pt() == T_COLON) advance();
     IntList ends = {0};
     int nextJ = -1;
     bool hadDefault = false;
@@ -3101,8 +3100,8 @@ static void return_statement(void) {
     emit_op(OP_RET);
 }
 
-/* defdata NAME ... enddata: constant values, separated by commas or line
- * ends, appended to the program's data pool. NAME was made an int constant
+/* defdata NAME ... enddata: constant values, separated by commas (a line
+ * end is no separator: 1, 2 then -1 on the next line would be 2 - 1), appended to the program's data pool. NAME was made an int constant
  * (the block's number) by prescan, so it can be used before this line. */
 static void push_data(Value v) {
     Program *p = C.prog;
@@ -3118,7 +3117,7 @@ static void defdata_statement(Token *dt) {
     expect(T_IDENT, "a name for the data block");
     C.prog->dataStart[C.dataBlock++] = C.prog->ndata;
     for (;;) {
-        while (pt() == T_NEWLINE || pt() == T_COLON) advance();
+        while (pt() == T_COLON) advance();
         if (pt() == T_ENDDATA) break;
         if (pt() == T_EOF) cerror_at(dt, "defdata on line %d is never closed (expected enddata)", dt->line);
         Token *at = peek();
@@ -3134,8 +3133,8 @@ static void defdata_statement(Token *dt) {
             if (pt() == T_ENDDATA) cerror("Expected a value after ',' (enddata follows)");
             continue;
         }
-        if (pt() != T_NEWLINE && pt() != T_COLON && pt() != T_ENDDATA)
-            cerror("Expected ',' or the end of the line between defdata items, but found %s", tok_desc(peek()));
+        if (pt() != T_ENDDATA && pt() != T_COLON && pt() != T_EOF)
+            cerror("Expected ',' between defdata items, but found %s", tok_desc(peek()));
     }
     advance(); /* enddata */
 }
@@ -3211,14 +3210,33 @@ static void add_global(Token *name, VType t) {
     new_global(name->lower, t);
 }
 
+/* Skips the value after '=' in a declaration: up to a ',' or ':' outside any
+ * brackets, or to where the expression stops, at a value followed by something
+ * that cannot carry it on (local a = 1 then local b = 2). A function value's
+ * body (function ... endfunction) and a list type (new list<int>) count as
+ * brackets. */
 static void skip_initializer(void) {
-    int depth = 0;
+    int depth = 0, types = 0;
+    bool ended = false;   /* the token just skipped ends a value */
     for (;;) {
         TokType t = pt();
-        if (t == T_EOF || t == T_NEWLINE) return;
-        if (depth == 0 && (t == T_COMMA || t == T_COLON)) return;
-        if (t == T_LPAREN || t == T_LBRACK || t == T_LIST_OPEN) depth++;
-        if (t == T_RPAREN || t == T_RBRACK || t == T_LIST_CLOSE) depth--;
+        if (t == T_EOF) return;
+        if (depth == 0 && (t == T_COMMA || t == T_COLON || (ended && !continues_expr(t)))) return;
+        Token *prev = C.pos > 0 ? peekn(-1) : NULL;
+        bool closesType = false;
+        if (t == T_LPAREN || t == T_LBRACK || t == T_LIST_OPEN || t == T_FUNCTION) depth++;
+        else if (t == T_RPAREN || t == T_RBRACK || t == T_LIST_CLOSE || t == T_ENDFUNCTION) depth--;
+        else if (t == T_LT && prev && prev->type == T_IDENT && !strcmp(prev->lower, "list")) { depth++; types++; }
+        else if (t == T_GT && types > 0) { depth--; types--; closesType = true; }
+        switch (t) {
+            case T_IDENT: case T_INTLIT: case T_LONGLIT: case T_FLOATLIT: case T_STRLIT:
+            case T_RPAREN: case T_RBRACK: case T_LIST_CLOSE: case T_NULL: case T_ENDFUNCTION:
+                ended = true; break;
+            case T_NE:   /* new int<> */
+                ended = prev && prev->type == T_IDENT && C.pos >= 2 && peekn(-2)->type == T_NEW; break;
+            default:
+                ended = closesType;
+        }
         advance();
     }
 }
@@ -3228,7 +3246,7 @@ static int count_dims_skip(void) {
     int depth = 1, commas = 0;
     while (depth > 0) {
         TokType t = pt();
-        if (t == T_EOF || t == T_NEWLINE) cerror("Missing ']'");
+        if (t == T_EOF) cerror("Missing ']'");
         advance();
         if (t == T_LBRACK || t == T_LPAREN) depth++;
         else if (t == T_RBRACK || t == T_RPAREN) depth--;
@@ -3300,7 +3318,7 @@ static void parse_signature(Token *name, bool isValue, Sig *out) {
                 pdef[n] = C.pos;
                 int depth = 0;
                 while (!(depth == 0 && (pt() == T_COMMA || pt() == T_RPAREN))) {
-                    if (pt() == T_NEWLINE || pt() == T_EOF) cerror("Missing ')' in function header");
+                    if (pt() == T_EOF) cerror("Missing ')' in function header");
                     if (pt() == T_LPAREN || pt() == T_LBRACK || pt() == T_LIST_OPEN) depth++;
                     if (pt() == T_RPAREN || pt() == T_RBRACK || pt() == T_LIST_CLOSE) depth--;
                     advance();
@@ -3394,7 +3412,7 @@ static void prescan(void) {
         int cap = 0;
         while (pt() != T_ENDTYPE) {
             if (pt() == T_EOF) cerror_at(&tl->toks[i], "type '%s' is never closed (expected endtype)", td->name);
-            if (pt() == T_NEWLINE || pt() == T_COLON) { advance(); continue; }
+            if (pt() == T_COLON) { advance(); continue; }
             if (pt() == T_FUNCTION || (pt() == T_IDENT && !strcmp(peek()->lower, "method")))
                 cerror("GooberBASIC types hold data only; write a function that takes the object instead");
             expect(T_FIELD, "field");
@@ -3492,7 +3510,7 @@ void compile_program(TokenList *tl, Program *prog) {
     prescan();
 
     while (pt() != T_EOF) {
-        if (pt() == T_NEWLINE || pt() == T_COLON) { advance(); continue; }
+        if (pt() == T_COLON) { advance(); continue; }
         statement();
         end_of_statement();
     }

@@ -1,0 +1,4 @@
+' expect: next takes no loop variable: write just next
+for i = 1 to 2
+    print(i)
+next i

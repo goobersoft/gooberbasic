@@ -24,7 +24,7 @@ for n = 1 to 3
   add_last(players, p)
 next
 for p:t_player = eachin players
-  if p.hp = 20 then remove(players, p)
+  if p.hp = 20 then remove(players, p) endif
 next
 for p = eachin players
   print(p.name + " hp=" + p.hp)
@@ -37,7 +37,7 @@ print(add(1, 2))
 print(add(1))
 print(fact(10))
 function fact(n)
-  if n <= 1 then return 1 else return n * fact(n - 1)
+  if n <= 1 then return 1 else return n * fact(n - 1) endif
 endfunction
 
 local grid:int[3, 4]
@@ -55,7 +55,7 @@ endselect
 i = 0
 while true
   i :+ 1
-  if i > 100 then exit
+  if i > 100 then exit endif
 wend
 print("i=" + i)
 repeat

@@ -17,7 +17,7 @@ typedef struct {
     const char *path;
     TokenList *out;
     Program *prog;
-    /* The brackets open on this line, innermost last: '(' and '[' as usual,
+    /* The brackets open, innermost last: '(' and '[' as usual,
      * 'a' an array literal's '[', 't' a list type's '<' (list<int>) and 'l' a
      * list literal's '<'. A '>' closes the innermost '<' only when nothing
      * opened since is still open, and stays alone (list<int>= is '>' '='). */
@@ -28,15 +28,6 @@ typedef struct {
 static char open_top(Lexer *L) { return L->nopen ? L->open[L->nopen - 1] : 0; }
 static void open_push(Lexer *L, char k) { if (L->nopen < (int)sizeof L->open) L->open[L->nopen++] = k; }
 static void open_pop(Lexer *L, const char *kinds) { if (L->nopen && strchr(kinds, open_top(L))) L->nopen--; }
-
-/* Inside an array or list literal, or a function's parameter list, a line may
- * end without ending the statement, so long tables can be written one row per
- * line and long parameter lists one or a few parameters per line. */
-static bool in_literal(Lexer *L) {
-    for (int i = 0; i < L->nopen; i++)
-        if (L->open[i] == 'a' || L->open[i] == 'l' || L->open[i] == 'p') return true;
-    return false;
-}
 
 static struct { const char *word; TokType type; } keywords[] = {
     {"if", T_IF}, {"then", T_THEN}, {"else", T_ELSE}, {"elseif", T_ELSEIF},
@@ -55,7 +46,7 @@ static struct { const char *word; TokType type; } keywords[] = {
 };
 
 static const char *tok_names[T__COUNT] = {
-    [T_EOF] = "end of file", [T_NEWLINE] = "end of line", [T_IDENT] = "identifier",
+    [T_EOF] = "end of file", [T_IDENT] = "identifier",
     [T_INTLIT] = "integer", [T_FLOATLIT] = "float", [T_STRLIT] = "string", [T_LONGLIT] = "integer",
     [T_LPAREN] = "'('", [T_RPAREN] = "')'", [T_LBRACK] = "'['", [T_RBRACK] = "']'",
     [T_COMMA] = "','", [T_DOT] = "'.'", [T_COLON] = "':'", [T_PLUS] = "'+'",
@@ -103,22 +94,8 @@ static Token *push_tok(Lexer *L, TokType type) {
 }
 
 static TokType last_type(Lexer *L) {
-    if (L->out->count == 0) return T_NEWLINE;
+    if (L->out->count == 0) return T_EOF;
     return L->out->toks[L->out->count - 1].type;
-}
-
-/* Does a '(' here open a function's parameter list? It does when nothing is
- * open and the statement so far has a 'function' in it (function f(,
- * function f:t_point(, local g = function( ). A function type's '(' in the
- * header counts too (function make:int()(step:int)): either may span lines. */
-static bool opens_params(Lexer *L) {
-    if (L->nopen) return false;
-    for (int i = L->out->count - 1; i >= 0; i--) {
-        TokType t = L->out->toks[i].type;
-        if (t == T_NEWLINE) return false;
-        if (t == T_FUNCTION) return true;
-    }
-    return false;
 }
 
 /* Does the token just made end a value? If not, a '[' or '<' here starts a
@@ -178,7 +155,6 @@ static void do_include(Lexer *L, const char *name) {
     lex_file(path, L->out, L->prog);
     /* lex_file appended a trailing EOF token: drop it */
     if (L->out->count && L->out->toks[L->out->count - 1].type == T_EOF) L->out->count--;
-    push_tok(L, T_NEWLINE);
 }
 
 static void lex_number(Lexer *L) {
@@ -319,16 +295,11 @@ static void lex_source(Lexer *L) {
         char c = *L->p;
         if (c == 0) break;
         if (c == ' ' || c == '\t' || c == '\r') { L->p++; continue; }
-        if (c == '\n') {
-            L->p++;
-            L->line++;
-            if (in_literal(L)) continue;
-            if (last_type(L) != T_NEWLINE) push_tok(L, T_NEWLINE);
-            L->nopen = 0;       /* an unclosed bracket is the parser's error to report */
-            continue;
-        }
+        /* A line end is only whitespace: statements end where their grammar
+         * does, so they may be split across lines or share one, as in Lua. */
+        if (c == '\n') { L->p++; L->line++; continue; }
         if (c == '\'') { while (*L->p && *L->p != '\n') L->p++; continue; }
-        if (c == '.' && L->p[1] == '.') { /* line continuation */
+        if (c == '.' && L->p[1] == '.') { /* old line continuation: no longer needed, still allowed */
             L->p += 2;
             while (*L->p && *L->p != '\n') L->p++;
             if (*L->p == '\n') { L->p++; L->line++; }
@@ -394,8 +365,8 @@ static void lex_source(Lexer *L) {
         }
         L->p++;
         switch (c) {
-            case '(': open_push(L, opens_params(L) ? 'p' : '('); push_tok(L, T_LPAREN); break;
-            case ')': push_tok(L, T_RPAREN); open_pop(L, "(p"); break;
+            case '(': open_push(L, '('); push_tok(L, T_LPAREN); break;
+            case ')': push_tok(L, T_RPAREN); open_pop(L, "("); break;
             case '[': open_push(L, after_value(L) ? '[' : 'a'); push_tok(L, T_LBRACK); break;
             case ']': push_tok(L, T_RBRACK); open_pop(L, "[a"); break;
             case ',': push_tok(L, T_COMMA); break;
@@ -485,7 +456,6 @@ void lex_file(const char *path, TokenList *out, Program *prog) {
     /* skip UTF-8 BOM */
     if ((unsigned char)L.p[0] == 0xEF && (unsigned char)L.p[1] == 0xBB && (unsigned char)L.p[2] == 0xBF) L.p += 3;
     lex_source(&L);
-    push_tok(&L, T_NEWLINE);
     push_tok(&L, T_EOF);
     free(src);
 }

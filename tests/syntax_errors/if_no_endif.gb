@@ -1,0 +1,3 @@
+' expect: if on line 2 is never closed (expected endif)
+if 1 = 1 then print("yes")
+print("after")

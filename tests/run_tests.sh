@@ -14,7 +14,7 @@ for t in tests/*.gb; do
 done
 # compile errors, one per file: the first line is "' expect: <text the error must contain>"
 # (scope_errors: what an included file keeps to itself; their includes are in scope_errors/lib)
-for f in tests/superstrict/*.gb tests/scope_errors/*.gb tests/data_errors/*.gb tests/list_errors/*.gb tests/literal_errors/*.gb; do
+for f in tests/superstrict/*.gb tests/scope_errors/*.gb tests/data_errors/*.gb tests/list_errors/*.gb tests/literal_errors/*.gb tests/syntax_errors/*.gb; do
     want=$(sed -n "1s/^' expect: //p" "$f")
     got=$($GOOBER --check "$f" 2>&1)
     if printf '%s' "$got" | grep -qF -- "$want"; then pass=$((pass + 1))

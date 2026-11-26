@@ -1,0 +1,2 @@
+' expect: Call print with parentheses around all of its arguments
+print(1) + 2

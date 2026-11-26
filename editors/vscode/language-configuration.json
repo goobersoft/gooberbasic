@@ -19,7 +19,7 @@
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([A-Za-z_][A-Za-z0-9_]*[%#$]?)",
   "indentationRules": {
     "increaseIndentPattern": {
-      "pattern": "^\\s*(?:if\\b(?!.*\\bthen\\s*[^\\s']).*|(?:else|elseif|else\\s+if)\\b.*|(?:while|repeat|select|function|type)\\b(?!.*\\b(?:wend|endwhile|until|forever|endselect|endfunction|endtype)\\b).*|for\\b(?!.*\\bnext\\b).*)$",
+      "pattern": "^\\s*(?:if\\b(?!.*\\b(?:endif|end\\s+if)\\b).*|(?:else|elseif|else\\s+if)\\b.*|(?:while|repeat|select|function|type)\\b(?!.*\\b(?:wend|endwhile|until|forever|endselect|endfunction|endtype)\\b).*|for\\b(?!.*\\bnext\\b).*)$",
       "flags": "i"
     },
     "decreaseIndentPattern": {
