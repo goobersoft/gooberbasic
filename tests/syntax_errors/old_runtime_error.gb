@@ -1,0 +1,2 @@
+' expect: runtime_error was renamed to error
+runtime_error("oops")

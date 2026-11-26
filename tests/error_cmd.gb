@@ -1,0 +1,8 @@
+' error() stops the program with a message and a call trace
+function check(n:int)
+    if n < 0 then error("n went negative: " + str(n)) endif
+    print("ok " + str(n))
+endfunction
+check(1)
+check(-2)
+print("never printed")

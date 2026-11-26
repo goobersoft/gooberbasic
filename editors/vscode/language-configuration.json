@@ -19,11 +19,11 @@
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([A-Za-z_][A-Za-z0-9_]*[%#$]?)",
   "indentationRules": {
     "increaseIndentPattern": {
-      "pattern": "^\\s*(?:if\\b(?!.*\\b(?:endif|end\\s+if)\\b).*|(?:else|elseif|else\\s+if)\\b.*|(?:while|repeat|select|function|type)\\b(?!.*\\b(?:wend|endwhile|until|forever|endselect|endfunction|endtype)\\b).*|for\\b(?!.*\\bnext\\b).*)$",
+      "pattern": "^\\s*(?:if\\b(?!.*\\bendif\\b).*|(?:else|elseif)\\b.*|(?:while|repeat|select|function|type)\\b(?!.*\\b(?:wend|endwhile|until|forever|endselect|endfunction|endtype)\\b).*|for\\b(?!.*\\bnext\\b).*)$",
       "flags": "i"
     },
     "decreaseIndentPattern": {
-      "pattern": "^\\s*(?:endif|end\\s+if|else|elseif|else\\s+if|wend|endwhile|end\\s+while|until|forever|next|endselect|end\\s+select|endfunction|end\\s+function|endtype|end\\s+type)\\b",
+      "pattern": "^\\s*(?:endif|else|elseif|wend|endwhile|until|forever|next|endselect|endfunction|endtype)\\b",
       "flags": "i"
     }
   }

@@ -57,3 +57,11 @@ print(add3(
 defdata D 1, 2,
     3 enddata
 restore(D) print(read_int() + read_int() + read_int())
+
+' a block closer is one word, which may sit on its own line
+if a = 1 then print("closer on its own line")
+endif
+
+' elseif is one word; else if is an else holding a new if, with its own endif
+if a = 2 then print("two") elseif a = 1 then print("elseif") endif
+if a = 2 then print("two") else if a = 1 then print("nested if") endif endif

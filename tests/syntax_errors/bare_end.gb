@@ -1,0 +1,4 @@
+' expect: end is not a word on its own: blocks close with endif
+print("before")
+end
+print("after")

@@ -122,7 +122,7 @@ static bool word_at(const char *p, const char *word) {
 }
 
 static void skip_rem_block(Lexer *L) {
-    /* We are just past `Rem`. Skip until a line starting with End Rem / EndRem. */
+    /* We are just past `Rem`. Skip until a line starting with EndRem. */
     for (;;) {
         while (*L->p && *L->p != '\n') L->p++;
         if (!*L->p) return; /* unterminated Rem runs to end of file, like Blitz */
@@ -131,10 +131,10 @@ static void skip_rem_block(Lexer *L) {
         const char *q = L->p;
         while (*q == ' ' || *q == '\t') q++;
         if (word_at(q, "endrem")) { L->p = q + 6; return; }
-        if (word_at(q, "end")) {
+        if (word_at(q, "end")) {   /* end rem would leave the rest of the file a comment */
             const char *r = q + 3;
             while (*r == ' ' || *r == '\t') r++;
-            if (word_at(r, "rem")) { L->p = r + 3; return; }
+            if (word_at(r, "rem")) lex_error(L, "Write endrem as one word: end is not a word on its own");
         }
     }
 }
@@ -258,25 +258,26 @@ static void lex_ident(Lexer *L) {
     for (int i = 0; keywords[i].word; i++) {
         if (strcmp(lower, keywords[i].word) == 0) {
             TokType type = keywords[i].type;
-            /* Merge two-word forms: End If, End Function, Else If, ... */
-            if (type == T_END || type == T_ELSE) {
+            /* end is reserved but is no word on its own: blocks close with one
+             * word (endif, endfunction, ...). Old code wrote end if, end function:
+             * it is told the one word to write, even with the second word on a
+             * later line. */
+            if (type == T_END) {
                 const char *q = L->p;
-                while (*q == ' ' || *q == '\t') q++;
-                static const struct { const char *w; TokType t; } ends[] = {
-                    {"if", T_ENDIF}, {"function", T_ENDFUNCTION}, {"type", T_ENDTYPE},
-                    {"select", T_ENDSELECT}, {"while", T_WEND}, {"data", T_ENDDATA}, {NULL, T_EOF}};
-                if (type == T_END) {
-                    for (int k = 0; ends[k].w; k++)
-                        if (word_at(q, ends[k].w)) {
-                            type = ends[k].t;
-                            L->p = q + strlen(ends[k].w);
-                            break;
-                        }
-                } else if (word_at(q, "if")) {
-                    type = T_ELSEIF;
-                    L->p = q + 2;
-                }
+                while (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') q++;
+                static const char *const ends[] = {"if", "function", "type", "select", "while", "data", "rem", NULL};
+                for (int k = 0; ends[k]; k++)
+                    if (word_at(q, ends[k])) {
+                        char msg[96];
+                        snprintf(msg, sizeof msg, "Write end%s as one word: end is not a word on its own", ends[k]);
+                        lex_error(L, msg);
+                    }
+                lex_error(L, "end is not a word on its own: blocks close with endif, endfunction, endtype, "
+                             "endselect, endwhile (or wend) or enddata. To stop the program, use stop()");
             }
+            /* else if is not elseif: else alone is a statement, so else then if
+             * would have to mean one thing on a line and another split over two.
+             * It is always an else holding a new if; elseif is one word. */
             Token *t = push_tok(L, type);
             t->text = name;
             t->lower = lower;

@@ -1,0 +1,3 @@
+ok 1
+tests/error_cmd.gb:3: runtime error: n went negative: -2
+  called from check at tests/error_cmd.gb:7

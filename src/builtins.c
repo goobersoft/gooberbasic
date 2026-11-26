@@ -44,9 +44,15 @@ static Value n_input(VM *vm, int argc, Value *args) {
     return v_str(str_new(vm, buf, (int)n));
 }
 
-static Value n_runtimeerror(VM *vm, int argc, Value *args) {
+static Value n_error(VM *vm, int argc, Value *args) {
     (void)argc;
     vm_error(vm, "%s", str_chars(ARG_S(0)));
+}
+
+/* stop(): ends the program cleanly (exit code 0) from anywhere, inside a function too */
+static Value n_stop(VM *vm, int argc, Value *args) {
+    (void)argc; (void)args;
+    vm_exit(vm, 0);
 }
 
 static Value n_assert(VM *vm, int argc, Value *args) {
@@ -555,7 +561,8 @@ NativeDef gb_core_natives[] = {
     {"print", 'v', "|s", n_print},
     {"write", 'v', "s", n_write},
     {"input", 's', "|s", n_input},
-    {"runtime_error", 'v', "s", n_runtimeerror},
+    {"error", 'v', "s", n_error},
+    {"stop", 'v', "", n_stop},
     {"assert", 'v', "i|s", n_assert},
 
     {"restore", 'v', "|i", n_restore},

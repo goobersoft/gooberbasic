@@ -1,0 +1,5 @@
+' expect: Write endrem as one word
+rem
+  a comment
+end rem
+print("after")

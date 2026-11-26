@@ -214,7 +214,7 @@ elseif x > 5
     print("medium")
 else
     print("small")
-endif                                     ' or end if
+endif
 
 while lives > 0 ... wend                   ' or endwhile
 repeat ... until done                      ' or ... forever
@@ -229,9 +229,16 @@ endselect
 ```
 
 `exit` leaves the innermost loop, `continue` skips to its next round.
-`end` stops the program.
+`stop()` ends the program cleanly from anywhere, even inside a function; `return` in the
+main program (outside any function) does too. `error(message$)` stops it with an error.
 
-Every `if` ends with `endif`, and `then` is optional. A `return` with no value has to
+Blocks close with one word: `endif`, `endfunction`, `endtype`, `endselect`, `endwhile`
+(or `wend`), `enddata`, `endrem`. `end` is reserved but is not a word on its own, so
+`end if` is an error that says to write `endif`.
+
+Every `if` ends with `endif`, and `then` is optional. `elseif` is one word: `else if` is
+an `else` whose block starts a new `if`, which needs an `endif` of its own. A `return`
+with no value has to
 come last in its block (as in Lua), since anything after it that can be a value is
 taken as the value to return.
 
@@ -490,7 +497,7 @@ local level:int[] = [                   ' a literal may span lines
 
 ## Data blocks
 
-`defdata NAME ... enddata` (or `end data`) writes a table of values straight into
+`defdata NAME ... enddata` writes a table of values straight into
 the code, like BASIC's `DATA`. Point at a block with `restore`, then take the values
 out one at a time, in order, with `read_int()`, `read_float()` or `read_string()`:
 
@@ -537,7 +544,7 @@ Optional arguments are shown in `[brackets]`. String positions are 1-based.
 Angles are in **degrees**.
 
 ### Console & program
-`print([text$])` · `write(text$)` · `input$([prompt$])` · `runtime_error(message$)` · `assert(condition [, message$])` · `end`
+`print([text$])` · `write(text$)` · `input$([prompt$])` · `stop()` · `error(message$)` · `assert(condition [, message$])`
 
 `assert` stops the program with "assertion failed" (plus `message$`, if given)
 when `condition` is 0. `message$` is built every time the line runs, even when
@@ -633,7 +640,7 @@ Constants: `NET_TCP` (the default mode), `NET_UDP`; `net_status()` gives `NET_OF
 - A connection that is silent for 5 seconds is dropped; joining gives up after 5 seconds. IPv4 only.
 
 ```
-if not net_host(4040) then print("can't host: " + net_error()) end endif
+if not net_host(4040) then print("can't host: " + net_error()) return endif
 repeat
     net_set(0, net_get(0) + 1)                   ' everyone sees the count go up
     while net_messages() > 0 : print("player " + net_from() + ": " + net_recv()) : wend
@@ -652,7 +659,7 @@ source.gb   ──lexer──▶ tokens ──prescan──▶ symbol tables ─
 
 | File | Role |
 |---|---|
-| `src/lexer.c` | Tokens; merges `end if`/`else if` into `endif`/`elseif`, handles `rem`, `..`, `include` |
+| `src/lexer.c` | Tokens; handles `rem`, `..`, `include` |
 | `src/compiler.c` | Prescan, then single-pass recursive descent straight to bytecode, with type checking and constant folding (`W / 2 - 10` becomes one constant) |
 | `src/vm.c` | Stack VM dispatch loop, runtime errors with call trace, `--disasm` |
 | `src/objects.c` | Strings, instances, arrays, lists, mark-and-sweep GC |

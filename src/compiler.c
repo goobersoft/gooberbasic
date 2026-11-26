@@ -87,6 +87,10 @@ static struct {
     FuncState mainState;
     int32_t lastLine;
     int depth;
+    /* the else blocks being compiled that begin with an if (else if ...):
+     * someone who meant elseif is told so when the blocks don't close */
+    Token *elseIfs[64];
+    int nElseIfs;
     int dataBlock;     /* the next defdata block the main pass fills */
     /* constant folding (see fold()) */
     int starts[4], nstarts;   /* offsets of the most recent instructions */
@@ -729,11 +733,12 @@ static const char *const LIST_FNS[] = {
 };
 enum { LF_REMOVE = 2, LF_CONTAINS = 3, LF_INSERT = 4, LF_COUNT = 5, LF_IS_EMPTY = 6, LF_FIRST = 8 };
 
-/* the names they had before, so old code gets told what to write instead */
-static const char *const OLD_LIST_FNS[][2] = {
+/* names that commands had before, so old code gets told what to write instead */
+static const char *const OLD_FNS[][2] = {
     {"list_add_first", "add_first"}, {"list_add_last", "add_last"}, {"list_remove", "remove"},
     {"list_contains", "contains"}, {"count_list", "count"}, {"list_is_empty", "is_empty"},
     {"clear_list", "clear"}, {"list_first", "first"}, {"list_last", "last"},
+    {"runtime_error", "error"},
     {NULL, NULL}
 };
 
@@ -1915,10 +1920,10 @@ static int list_fn_index(const char *lower) {
     return -1;
 }
 
-static void old_list_fn_check(Token *id) {
-    for (int i = 0; OLD_LIST_FNS[i][0]; i++)
-        if (!strcmp(OLD_LIST_FNS[i][0], id->lower))
-            cerror_at(id, "%s was renamed to %s", id->text, OLD_LIST_FNS[i][1]);
+static void old_fn_check(Token *id) {
+    for (int i = 0; OLD_FNS[i][0]; i++)
+        if (!strcmp(OLD_FNS[i][0], id->lower))
+            cerror_at(id, "%s was renamed to %s", id->text, OLD_FNS[i][1]);
 }
 
 /* add_first / add_last / remove / contains (list, value), insert (list, position, value),
@@ -1967,7 +1972,7 @@ static bool intrinsic(Token *id, VType *out) {
                       "Keep objects in a list and loop with for x:t_foo = eachin list", id->text);
     if (!strcmp(n, "create_list"))
         cerror_at(id, "create_list was replaced by typed lists, e.g. new list<int> or new list<t_enemy>");
-    old_list_fn_check(id);
+    old_fn_check(id);
     int li = list_fn_index(n);
     if (li >= 0) {
         VType r = list_call(id, li, hasParen);
@@ -2553,6 +2558,16 @@ static void cond_expr(void) {
 
 static void statement(void);
 
+/* For an error about blocks that don't close: a note when an open else
+ * block starts with an if, which needs its own endif (elseif is one word). */
+static const char *else_if_note(void) {
+    static char buf[200];
+    if (C.nElseIfs == 0) return "";
+    snprintf(buf, sizeof buf, ". Note: else if on line %d starts a new if inside the else, which needs its own "
+             "endif; to go on with the same if, write elseif", C.elseIfs[C.nElseIfs - 1]->line);
+    return buf;
+}
+
 /* After a statement: ':' or ';', or the next statement, which starts with a
  * name or a keyword (block ends like endif and next are keywords too). */
 static void end_of_statement(void) {
@@ -2571,8 +2586,8 @@ static void block(const TokType *stops, int nstops, Token *opener) {
         TokType t = pt();
         if (in_stops(t, stops, nstops)) break;
         if (t == T_EOF)
-            cerror_at(opener, "%s on line %d is never closed (expected %s)", tok_name(opener->type), opener->line,
-                      tok_name(stops[0]));
+            cerror_at(opener, "%s on line %d is never closed (expected %s)%s", tok_name(opener->type), opener->line,
+                      tok_name(stops[0]), else_if_note());
         if (t == T_COLON) { advance(); continue; }
         statement();
         if (!in_stops(pt(), stops, nstops)) end_of_statement();
@@ -2737,7 +2752,7 @@ static void call_statement(Token *id) {
     int li = f ? -1 : list_fn_index(id->lower);
     int n = f || li >= 0 ? -1 : native_find(id->lower);
     if (!f) private_func_check(id);
-    if (!f && li < 0 && n < 0) { old_list_fn_check(id); unknown_name(id, "command or function"); }
+    if (!f && li < 0 && n < 0) { old_fn_check(id); unknown_name(id, "command or function"); }
     if (f) { VType r = call_user(f, parens); call_chain_statement(r, true); }
     else if (li >= 0) { list_call(id, li, parens); emit_op(OP_POP); }
     else { call_native(n, parens); emit_op(OP_POP); }
@@ -2815,7 +2830,10 @@ static void if_statement(Token *ifTok) {
             patch_here(jf);
             jf = -1;
             static const TokType endOnly[] = {T_ENDIF};
+            bool elseIf = pt() == T_IF && C.nElseIfs < 64;
+            if (elseIf) C.elseIfs[C.nElseIfs++] = peek();
             block(endOnly, 1, ifTok);
+            if (elseIf) C.nElseIfs--;
         }
         break;
     }
@@ -3170,7 +3188,6 @@ static void statement(void) {
             return;
         }
         case T_RETURN: advance(); return_statement(); return;
-        case T_END: advance(); emit_op(OP_END); return;
         case T_DELETE:
             cerror_at(t, "delete was removed: objects are freed automatically once nothing refers to them. "
                          "Set the variable to null, or remove it from its list");
@@ -3186,14 +3203,14 @@ static void statement(void) {
         }
         case T_DEFDATA: advance(); defdata_statement(t); return;
         case T_IDENT: ident_statement(); return;
-        case T_ENDDATA: cerror("enddata without defdata");
-        case T_ENDFUNCTION: cerror("endfunction without function");
-        case T_ENDIF: cerror("endif without if");
-        case T_WEND: cerror("wend without while");
-        case T_NEXT: cerror("next without for");
-        case T_UNTIL: cerror("until without repeat");
-        case T_ENDSELECT: cerror("endselect without select");
-        case T_ENDTYPE: cerror("endtype without type");
+        case T_ENDDATA: cerror("enddata without defdata%s", else_if_note());
+        case T_ENDFUNCTION: cerror("endfunction without function%s", else_if_note());
+        case T_ENDIF: cerror("endif without if%s", else_if_note());
+        case T_WEND: cerror("wend without while%s", else_if_note());
+        case T_NEXT: cerror("next without for%s", else_if_note());
+        case T_UNTIL: cerror("until without repeat%s", else_if_note());
+        case T_ENDSELECT: cerror("endselect without select%s", else_if_note());
+        case T_ENDTYPE: cerror("endtype without type%s", else_if_note());
         case T_ELSE: cerror("else without if");
         case T_ELSEIF: cerror("elseif without if");
         case T_FIELD: cerror("field must be inside a type");

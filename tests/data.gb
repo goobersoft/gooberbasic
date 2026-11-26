@@ -62,7 +62,7 @@ enddata
 
 defdata LEVEL_2 : 9, 8, 7 : enddata
 defdata EMPTY
-end data
+enddata
 
 defdata MIXED
     2.9, "1.5", -7, SIZE * 2,

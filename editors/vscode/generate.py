@@ -31,7 +31,6 @@ lexer, builtins, gfx, compiler = read("lexer.c"), read("builtins.c"), read("gfx.
 net = read("net.c")
 
 # ---- names from the sources ----
-# only the keywords[] table: the "end data" / "end if" merge table holds words that aren't keywords alone
 kwtable = re.search(r'keywords\[\] = \{(.*?)\{NULL', lexer, re.S).group(1)
 keywords = set(re.findall(r'\{"([a-z]+)", T_[A-Z]+\}', kwtable))
 
@@ -66,11 +65,11 @@ consts = list(dict.fromkeys(consts))
 types = re.findall(r'\{"([a-z0-9]+)", NT_[A-Z0-9]+\}', compiler) + ["string"]
 
 # keywords the compiler rejects with a "was removed" message
-removed = {"delete", "each"}
+removed = {"delete", "each", "end"}   # end: blocks close with one word (endif)
 
 control = {"if", "then", "else", "elseif", "endif", "while", "wend", "endwhile", "repeat", "until",
            "forever", "for", "to", "step", "next", "eachin", "select", "case", "default",
-           "endselect", "exit", "continue", "return", "end"}
+           "endselect", "exit", "continue", "return"}
 declare = {"function", "endfunction", "type", "endtype", "field", "local", "global", "const",
            "dim", "strict", "superstrict", "include", "new", "defdata", "enddata"}
 wordops = {"and", "or", "not", "mod", "shl", "shr", "sar"}
@@ -111,9 +110,9 @@ grammar = {
     "repository": {
         "comments": {"patterns": [
             {"name": "comment.line.apostrophe.gooberbasic", "match": "'.*$"},
-            # rem starts a block that runs to a line starting with endrem / end rem
+            # rem starts a block that runs to a line starting with endrem
             {"name": "comment.block.rem.gooberbasic",
-             "begin": r"(?i)\brem\b", "end": r"(?i)^\s*end\s*rem\b"},
+             "begin": r"(?i)\brem\b", "end": r"(?i)^\s*endrem\b"},
         ]},
         "strings": {"patterns": [{
             "name": "string.quoted.double.gooberbasic",
@@ -137,7 +136,7 @@ grammar = {
             {"match": r"(?i)\b(type)\s+(" + ID + r")",
              "captures": {"1": {"name": "storage.type.type.gooberbasic"},
                           "2": {"name": "entity.name.type.gooberbasic"}}},
-            {"match": r"(?i)\b(end\s*(?:function|type))\b",
+            {"match": r"(?i)\b(end(?:function|type))\b",
              "captures": {"1": {"name": "storage.type.end.gooberbasic"}}},
         ]},
         # `:int`, `:t_enemy`, `:list<float>`, `:string[]`, `new t_enemy` and `new list<int>`
@@ -162,8 +161,6 @@ grammar = {
                           "3": {"name": "storage.type.gooberbasic"}}},
         ]},
         "keywords": {"patterns": [
-            {"name": "keyword.control.gooberbasic",
-             "match": r"(?i)\b(?:end\s+(?:if|select|while)|else\s+if)\b"},
             {"name": "invalid.deprecated.gooberbasic", "match": r"(?i)\b(?:" + alt(removed) + r")\b"},
             {"name": "keyword.control.gooberbasic", "match": r"(?i)\b(?:" + alt(control) + r")\b"},
             {"name": "storage.modifier.gooberbasic", "match": r"(?i)\b(?:" + alt(declare) + r")\b"},

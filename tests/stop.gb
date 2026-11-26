@@ -1,0 +1,8 @@
+' stop() ends the program cleanly from anywhere, even inside nested calls
+function deep(n:int)
+    if n = 0 then print("stopping") stop() endif
+    deep(n - 1)
+endfunction
+print("start")
+deep(3)
+print("never printed")

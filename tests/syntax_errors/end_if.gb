@@ -1,0 +1,5 @@
+' expect: Write endif as one word: end is not a word on its own
+if 1 = 1
+    print("yes")
+end
+  if

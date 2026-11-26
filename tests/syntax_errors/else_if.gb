@@ -1,0 +1,8 @@
+' expect: next without for. Note: else if on line 5 starts a new if inside the else
+for i = 1 to 2
+    if i = 1
+        print("one")
+    else if i = 2
+        print("two")
+    endif
+next
